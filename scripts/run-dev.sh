@@ -7,13 +7,15 @@ cd "$ROOT"
 
 API_PORT="${API_PORT:-8000}"
 WEB_PORT="${WEB_PORT:-3000}"
+POSTGRES_PORT="${POSTGRES_PORT:-5432}"
 POSTGRES_COMPOSE="${ROOT}/docker-compose.postgres.yml"
 
 if [[ "${1:-}" == "-h" ]] || [[ "${1:-}" == "--help" ]]; then
   echo "Usage: $0 [--no-docker]"
   echo "  Starts Postgres via Docker (unless --no-docker), then API + web."
   echo "  If Docker is not running, Postgres is skipped; use SQLite (USE_SQLITE=true in api/.env) or start Docker Desktop."
-  echo "  Env: API_PORT (default $API_PORT), WEB_PORT (default $WEB_PORT)."
+  echo "  Env: API_PORT (default $API_PORT), WEB_PORT (default $WEB_PORT), POSTGRES_PORT (default $POSTGRES_PORT)."
+  echo "  If 5432 is already in use: POSTGRES_PORT=5433 $0 and set POSTGRES_PORT=5433 in api/.env."
   exit 0
 fi
 
@@ -38,9 +40,15 @@ start_postgres_container() {
     return 1
   fi
   if docker compose version >/dev/null 2>&1; then
-    docker compose -f "$POSTGRES_COMPOSE" up -d postgres
+    if ! docker compose -f "$POSTGRES_COMPOSE" up -d postgres; then
+      echo "Postgres container did not start. If the host port is busy, try:" >&2
+      echo "  POSTGRES_PORT=5433 $0   # and set POSTGRES_PORT=5433 in api/.env" >&2
+    fi
   elif command -v docker-compose >/dev/null 2>&1; then
-    docker-compose -f "$POSTGRES_COMPOSE" up -d postgres
+    if ! docker-compose -f "$POSTGRES_COMPOSE" up -d postgres; then
+      echo "Postgres container did not start. If the host port is busy, try:" >&2
+      echo "  POSTGRES_PORT=5433 $0   # and set POSTGRES_PORT=5433 in api/.env" >&2
+    fi
   else
     echo "docker compose not available; skipping Postgres." >&2
     return 0
@@ -55,7 +63,22 @@ start_postgres_container || true
 VENV="$ROOT/api/.venv"
 PIP="$VENV/bin/pip"
 UVICORN="$VENV/bin/uvicorn"
-if [[ ! -x "$VENV/bin/python" ]]; then
+
+venv_broken() {
+  [[ ! -x "$VENV/bin/python" ]] && return 0
+  if ! "$VENV/bin/python" -c "import sys" >/dev/null 2>&1; then
+    return 0
+  fi
+  [[ ! -x "$PIP" ]] && return 0
+  if ! "$PIP" --version >/dev/null 2>&1; then
+    return 0
+  fi
+  return 1
+}
+
+if venv_broken; then
+  echo "Recreating api/.venv (missing, copied from elsewhere, or broken interpreter) ..." >&2
+  rm -rf "$VENV"
   python3 -m venv "$VENV"
 fi
 "$PIP" install -q -r "$ROOT/api/requirements.txt"

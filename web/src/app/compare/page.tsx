@@ -2,8 +2,10 @@
 
 import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
-import { apiGet, apiPostJson } from "@/lib/api";
 import { useQuery } from "@tanstack/react-query";
+import { GitCompare } from "lucide-react";
+import { PageHeader } from "@/components/PageHeader";
+import { apiGet, apiPostJson } from "@/lib/api";
 
 type Doc = { id: number; filename: string; document_type: string };
 
@@ -24,55 +26,69 @@ export default function ComparePage() {
   });
 
   return (
-    <div className="space-y-6 max-w-xl">
-      <h1 className="text-2xl font-semibold">Compare documents</h1>
-      <div className="space-y-3">
-        <label className="block text-sm font-medium">Document A</label>
-        <select
-          className="w-full rounded-md border px-3 py-2 text-sm bg-white"
-          value={a === "" ? "" : String(a)}
-          onChange={(e) =>
-            setA(e.target.value ? Number(e.target.value) : "")
-          }
-        >
-          <option value="">Choose…</option>
-          {docs?.map((d) => (
-            <option key={d.id} value={d.id}>
-              {d.filename}
-            </option>
-          ))}
-        </select>
-        <label className="block text-sm font-medium pt-2">Document B</label>
-        <select
-          className="w-full rounded-md border px-3 py-2 text-sm bg-white"
-          value={b === "" ? "" : String(b)}
-          onChange={(e) =>
-            setB(e.target.value ? Number(e.target.value) : "")
-          }
-        >
-          <option value="">Choose…</option>
-          {docs?.map((d) => (
-            <option key={d.id} value={d.id}>
-              {d.filename}
-            </option>
-          ))}
-        </select>
+    <div className="mx-auto max-w-xl">
+      <PageHeader
+        title="Compare documents"
+        description="Select two processed documents to diff structured fields side by side."
+      />
+      <div className="card space-y-5 p-6">
+        <div>
+          <label className="mb-2 block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-300">
+            Document A
+          </label>
+          <select
+            className="select-field"
+            value={a === "" ? "" : String(a)}
+            onChange={(e) =>
+              setA(e.target.value ? Number(e.target.value) : "")
+            }
+          >
+            <option value="">Choose…</option>
+            {docs?.map((d) => (
+              <option key={d.id} value={d.id}>
+                {d.filename}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="mb-2 block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-300">
+            Document B
+          </label>
+          <select
+            className="select-field"
+            value={b === "" ? "" : String(b)}
+            onChange={(e) =>
+              setB(e.target.value ? Number(e.target.value) : "")
+            }
+          >
+            <option value="">Choose…</option>
+            {docs?.map((d) => (
+              <option key={d.id} value={d.id}>
+                {d.filename}
+              </option>
+            ))}
+          </select>
+        </div>
         <button
           type="button"
-          className="rounded-md bg-zinc-900 text-white px-4 py-2 text-sm disabled:opacity-50"
+          className="btn-primary w-full"
           disabled={!a || !b || mut.isPending}
           onClick={() => mut.mutate()}
         >
+          <GitCompare className="h-4 w-4" />
           Compare
         </button>
       </div>
       {mut.data && (
-        <pre className="rounded-lg bg-zinc-950 text-zinc-100 p-4 text-xs overflow-auto max-h-[400px]">
+        <pre className="card mt-6 max-h-[400px] overflow-auto bg-slate-950 p-4 font-mono text-xs leading-relaxed text-teal-100">
           {JSON.stringify(mut.data, null, 2)}
         </pre>
       )}
       {mut.isError && (
-        <p className="text-red-600 text-sm">{(mut.error as Error).message}</p>
+        <p className="mt-4 text-sm text-red-600 dark:text-red-400">
+          {(mut.error as Error).message}
+        </p>
       )}
     </div>
   );

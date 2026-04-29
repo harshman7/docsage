@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import { Download, FileSpreadsheet, FileText } from "lucide-react";
+import { PageHeader } from "@/components/PageHeader";
 import { apiUploadExcel } from "@/lib/api";
 
 export default function ExportPage() {
@@ -47,30 +49,54 @@ export default function ExportPage() {
   }
 
   return (
-    <div className="space-y-6 max-w-md">
-      <h1 className="text-2xl font-semibold">Export</h1>
-      <p className="text-sm text-zinc-600">
-        Download Excel workbook or markdown summary from the API.
-      </p>
-      <div className="flex flex-col gap-3">
+    <div className="mx-auto max-w-md">
+      <PageHeader
+        title="Export"
+        description="Pull a spreadsheet or markdown summary from the API for offline analysis."
+      />
+      <div className="card divide-y divide-slate-100 p-0 dark:divide-slate-600">
         <button
           type="button"
-          className="rounded-md bg-zinc-900 text-white px-4 py-2 text-sm disabled:opacity-50"
+          className="flex w-full items-center gap-4 px-5 py-4 text-left transition hover:bg-slate-50 disabled:opacity-45 dark:hover:bg-slate-700/40"
           disabled={loading}
           onClick={downloadExcel}
         >
-          Download Excel
+          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-teal-100 text-teal-700 dark:bg-teal-950 dark:text-teal-400">
+            <FileSpreadsheet className="h-5 w-5" />
+          </div>
+          <div className="flex-1">
+            <div className="font-medium text-slate-900 dark:text-white">
+              Excel workbook
+            </div>
+            <div className="text-xs text-slate-500 dark:text-slate-300">
+              .xlsx export
+            </div>
+          </div>
+          <Download className="h-4 w-4 text-slate-400" />
         </button>
         <button
           type="button"
-          className="rounded-md border border-zinc-300 px-4 py-2 text-sm disabled:opacity-50"
+          className="flex w-full items-center gap-4 px-5 py-4 text-left transition hover:bg-slate-50 disabled:opacity-45 dark:hover:bg-slate-700/40"
           disabled={loading}
           onClick={downloadSummary}
         >
-          Download summary (.md)
+          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300">
+            <FileText className="h-5 w-5" />
+          </div>
+          <div className="flex-1">
+            <div className="font-medium text-slate-900 dark:text-white">
+              Summary report
+            </div>
+            <div className="text-xs text-slate-500 dark:text-slate-300">
+              Markdown (.md)
+            </div>
+          </div>
+          <Download className="h-4 w-4 text-slate-400" />
         </button>
       </div>
-      {err && <p className="text-red-600 text-sm">{err}</p>}
+      {err && (
+        <p className="mt-4 text-sm text-red-600 dark:text-red-400">{err}</p>
+      )}
     </div>
   );
 }

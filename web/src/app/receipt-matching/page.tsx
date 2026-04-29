@@ -1,6 +1,8 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Receipt, Search } from "lucide-react";
+import { PageHeader } from "@/components/PageHeader";
 import { apiGet } from "@/lib/api";
 
 type Row = Record<string, unknown>;
@@ -30,31 +32,44 @@ export default function ReceiptMatchingPage() {
   const rows = data?.receipts ?? [];
 
   return (
-    <div className="space-y-6">
-      <h1 className="text-2xl font-semibold">Receipt matching</h1>
-      <ul className="space-y-2">
+    <div>
+      <PageHeader
+        title="Receipt matching"
+        description="Link unmatched receipts to transactions the model suggests."
+      />
+      <ul className="space-y-3">
         {rows.map((r) => (
           <li
             key={String(r.receipt_id)}
-            className="flex items-center justify-between rounded-lg border bg-white p-3 text-sm"
+            className="card flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5"
           >
-            <span>{String(r.filename)}</span>
+            <div className="flex min-w-0 items-center gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-200">
+                <Receipt className="h-5 w-5" />
+              </div>
+              <span className="truncate font-medium text-slate-900 dark:text-white">
+                {String(r.filename)}
+              </span>
+            </div>
             <button
               type="button"
-              className="rounded bg-zinc-900 px-3 py-1 text-white text-xs"
+              className="btn-primary shrink-0 py-2 text-xs sm:text-sm"
               disabled={match.isPending}
               onClick={() => match.mutate(Number(r.receipt_id))}
             >
+              <Search className="h-3.5 w-3.5" />
               Find match
             </button>
           </li>
         ))}
         {!rows.length && (
-          <p className="text-zinc-500 text-sm">No receipt rows.</p>
+          <div className="card py-14 text-center text-sm text-slate-500 dark:text-slate-300">
+            No unmatched receipts in the queue.
+          </div>
         )}
       </ul>
       {match.data && (
-        <pre className="text-xs bg-zinc-950 text-zinc-100 p-4 rounded-lg overflow-auto">
+        <pre className="card mt-6 max-h-64 overflow-auto bg-slate-950 p-4 font-mono text-xs text-teal-100">
           {JSON.stringify(match.data, null, 2)}
         </pre>
       )}

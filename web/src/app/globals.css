@@ -3,25 +3,192 @@
 @tailwind utilities;
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #f4f6f8;
+  --foreground: #0f172a;
+  --accent: #0d9488;
+  --accent-muted: rgba(13, 148, 136, 0.12);
+  --ring-focus: rgba(13, 148, 136, 0.35);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+/* Batcave / “Batman” dark: near-black + gold utility accent */
+html.dark {
+  --background: #050505;
+  --foreground: #fafafa;
+  --accent: #d4af37;
+  --accent-muted: rgba(212, 175, 55, 0.14);
+  --ring-focus: rgba(212, 175, 55, 0.45);
 }
 
 body {
   color: var(--foreground);
   background: var(--background);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-geist-sans), system-ui, sans-serif;
+}
+
+/* Apple-style landing uses its own background; avoid mesh bleed on marketing route */
+.landing-story {
+  --background: transparent;
+}
+
+.font-display {
+  font-family: var(--font-geist-sans), system-ui, sans-serif;
+}
+
+.font-mono-ui {
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+}
+
+/* Markdown blocks (chat + insights) */
+.rich-md {
+  @apply text-slate-700 dark:text-neutral-200;
+}
+.rich-md p {
+  @apply mb-3 last:mb-0 leading-relaxed;
+}
+.rich-md ul,
+.rich-md ol {
+  @apply my-3 space-y-1 pl-5;
+}
+.rich-md ul {
+  @apply list-disc;
+}
+.rich-md ol {
+  @apply list-decimal;
+}
+.rich-md li {
+  @apply leading-relaxed;
+}
+.rich-md strong {
+  @apply font-semibold text-slate-900 dark:text-white;
+}
+.rich-md code {
+  @apply rounded-md bg-slate-100 px-1.5 py-0.5 font-mono text-xs text-slate-800 dark:bg-neutral-800 dark:text-amber-100;
+}
+.rich-md pre {
+  @apply my-3 overflow-x-auto rounded-xl bg-slate-900 p-4 text-xs text-slate-100 dark:bg-black dark:text-neutral-200;
+}
+.rich-md pre code {
+  @apply bg-transparent p-0 text-inherit;
+}
+.rich-md h1,
+.rich-md h2,
+.rich-md h3 {
+  @apply mt-5 font-semibold text-slate-900 first:mt-0 dark:text-white;
+}
+.rich-md h1 {
+  @apply text-lg;
+}
+.rich-md h2 {
+  @apply text-base;
+}
+.rich-md h3 {
+  @apply text-sm;
+}
+.rich-md a {
+  @apply text-teal-700 underline decoration-teal-400/40 underline-offset-2 transition hover:decoration-teal-600 dark:text-amber-400 dark:decoration-amber-500/40 dark:hover:text-amber-300;
+}
+.rich-md blockquote {
+  @apply my-3 border-l-2 border-teal-500/40 pl-4 text-slate-600 italic dark:border-amber-500/55 dark:text-neutral-300;
+}
+
+@layer components {
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl bg-teal-600 px-4 py-2.5 text-sm font-medium text-white shadow-sm shadow-teal-900/10 transition hover:bg-teal-500 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500/50 focus-visible:ring-offset-2 focus-visible:ring-offset-white disabled:pointer-events-none disabled:opacity-45 dark:bg-amber-600 dark:shadow-amber-950/40 dark:hover:bg-amber-500 dark:focus-visible:ring-amber-400/60 dark:focus-visible:ring-offset-[#050505];
+  }
+  .btn-secondary {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200/90 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 shadow-sm shadow-slate-900/5 transition hover:border-slate-300 hover:bg-slate-50 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500/30 focus-visible:ring-offset-2 focus-visible:ring-offset-white disabled:pointer-events-none disabled:opacity-45 dark:border-neutral-700 dark:bg-[#0a0a0a] dark:text-neutral-100 dark:shadow-none dark:hover:border-neutral-600 dark:hover:bg-neutral-900 dark:hover:text-white dark:focus-visible:ring-amber-500/35 dark:focus-visible:ring-offset-[#050505];
+  }
+  .card {
+    @apply rounded-2xl border border-slate-200/80 bg-white shadow-sm shadow-slate-900/[0.04] dark:border-neutral-800 dark:bg-[#0a0a0a] dark:shadow-xl dark:shadow-black/70;
+  }
+  .input-field {
+    @apply w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-900 shadow-sm placeholder:text-slate-400 transition focus:border-teal-500/50 focus:outline-none focus:ring-2 focus:ring-teal-500/20 dark:border-neutral-700 dark:bg-[#050505] dark:text-neutral-100 dark:placeholder:text-neutral-500 dark:focus:border-amber-500/45 dark:focus:ring-amber-500/25;
+  }
+  .select-field {
+    @apply input-field appearance-none bg-[length:1rem] bg-[right_0.75rem_center] bg-no-repeat pr-10;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  }
+}
+
+html.dark .select-field {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23a3a3a3' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
 }
 
 @layer utilities {
   .text-balance {
     text-wrap: balance;
+  }
+  .mesh-bg {
+    background-color: var(--background);
+    background-image:
+      radial-gradient(
+        ellipse 100% 80% at 0% -30%,
+        rgba(13, 148, 136, 0.08),
+        transparent 55%
+      ),
+      radial-gradient(
+        ellipse 80% 60% at 100% 0%,
+        rgba(100, 116, 139, 0.06),
+        transparent 50%
+      );
+  }
+}
+
+html.dark .mesh-bg {
+  background-color: #050505;
+  background-image:
+    radial-gradient(
+      ellipse 110% 75% at 0% 0%,
+      rgba(212, 175, 55, 0.09),
+      transparent 58%
+    ),
+    radial-gradient(
+      ellipse 90% 60% at 100% 100%,
+      rgba(30, 30, 30, 0.95),
+      transparent 50%
+    );
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  html {
+    scroll-behavior: smooth;
+  }
+
+  @keyframes landing-float {
+    0%,
+    100% {
+      transform: translateY(0) scale(1);
+    }
+    50% {
+      transform: translateY(-12px) scale(1.05);
+    }
+  }
+
+  @keyframes landing-blob {
+    0%,
+    100% {
+      transform: translate(0, 0) scale(1);
+      opacity: 0.45;
+    }
+    33% {
+      transform: translate(8px, -12px) scale(1.05);
+      opacity: 0.55;
+    }
+    66% {
+      transform: translate(-6px, 6px) scale(0.98);
+      opacity: 0.5;
+    }
+  }
+
+  .landing-quirk-dot {
+    animation: landing-float 4.5s ease-in-out infinite;
+  }
+
+  .landing-quirk-blob {
+    animation: landing-blob 18s ease-in-out infinite;
+  }
+
+  .landing-quirk-blob--delay {
+    animation-delay: -6s;
   }
 }
