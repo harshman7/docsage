@@ -54,6 +54,9 @@ data/raw_docs/*.jpeg
 data/embeddings/*.pkl
 data/embeddings/*.index
 
+# Redundant with web/public/logo-dark.png (keep a local copy out of git if needed)
+dark_mode_logo.png
+
 # OS
 .DS_Store
 .DS_Store?
