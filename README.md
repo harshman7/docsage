@@ -8,36 +8,30 @@ Agentic RAG stack for document intelligence (IDP-inspired): **FastAPI + LangGrap
 |------|------|
 | `api/` | Python app (`app` package), `requirements.txt`, `Dockerfile`, scripts |
 | `web/` | Next.js 14 (App Router) UI |
-| `docker-compose.yml` | Postgres + API (build from repo root: `api/Dockerfile`) |
+| `docker-compose.yml` | Postgres + optional API container (API image built from repo root) |
 
 ## Quick start (local)
 
-1. **Postgres** (from repo root):
+From the **repository root**:
 
-   ```bash
-   docker compose up -d postgres
-   ```
+```bash
+./scripts/run-dev.sh
+```
 
-2. **API** (from `api/`):
+This script:
 
-   ```bash
-   cd api
-   python -m venv .venv && source .venv/bin/activate
-   pip install -r requirements.txt
-   cp ../.env.example .env   # edit DB + LLM keys
-   uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
-   ```
+- Starts **Postgres** with `docker compose up -d postgres` (skipped with `./scripts/run-dev.sh --no-docker` if you use SQLite or manage Postgres yourself).
+- Ensures **`api/.env`** exists (copies `.env.example` once) and **`web/.env.local`** points `NEXT_PUBLIC_API_URL` at the API.
+- Creates **`api/.venv`**, installs Python deps, installs **web** deps if needed.
+- Runs **uvicorn** (reload) and **`npm run dev`** together until you press **Ctrl+C** (containers are left running unless you stop them separately).
 
-3. **Web** (from `web/`):
-
-   ```bash
-   cd web
-   cp .env.example .env.local   # set NEXT_PUBLIC_API_URL=http://localhost:8000
-   npm install
-   npm run dev
-   ```
+Ports: **`API_PORT`** (default `8000`), **`WEB_PORT`** (default `3000`).
 
 Open [http://localhost:3000](http://localhost:3000) (UI) and [http://localhost:8000/docs](http://localhost:8000/docs) (OpenAPI).
+
+### Manual breakdown (optional)
+
+If you prefer three terminals: start Postgres (`docker compose up -d postgres`), run `uvicorn` from `api/` with `app.main:app`, and `npm run dev` from `web/`. Copy `.env.example` → `api/.env` and set `web/.env.local` as needed.
 
 ## API
 
