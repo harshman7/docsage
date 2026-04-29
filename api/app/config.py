@@ -1,10 +1,17 @@
 """
 Application configuration loaded from environment variables.
 """
-from pydantic_settings import BaseSettings
+from pydantic import Field, AliasChoices
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing import Optional, List
 
 class Settings(BaseSettings):
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        case_sensitive=False,
+        extra="ignore",
+    )
+
     # Database
     POSTGRES_USER: str = "postgres"
     POSTGRES_PASSWORD: str = "postgres"
@@ -23,21 +30,13 @@ class Settings(BaseSettings):
     API_HOST: str = "0.0.0.0"
     API_PORT: int = 8000
     
-    # LLM Provider Selection
-    LLM_PROVIDER: str = "ollama"  # Options: "ollama", "groq", "huggingface"
-    
-    # Ollama (local)
-    OLLAMA_BASE_URL: str = "http://localhost:11434"
-    OLLAMA_MODEL: str = "llama3"  # or mistral, codellama, etc.
-    
-    # Groq API (free tier available)
-    GROQ_API_KEY: Optional[str] = None
-    GROQ_MODEL: str = "llama-3.1-8b-instant"  # Fast and free
-    
-    # Hugging Face Inference API (free tier available)
-    HUGGINGFACE_API_KEY: Optional[str] = None
-    HUGGINGFACE_MODEL: str = "mistralai/Mistral-7B-Instruct-v0.2"
-    
+    # Google AI Studio / Gemini (https://aistudio.google.com/apikey)
+    GOOGLE_API_KEY: Optional[str] = Field(
+        default=None,
+        validation_alias=AliasChoices("GOOGLE_API_KEY", "GEMINI_API_KEY"),
+    )
+    GOOGLE_AI_MODEL: str = "gemini-3.1-flash-lite-preview"  # Gemini 3.1 Flash-Lite (preview)
+
     # Vector Store
     FAISS_INDEX_PATH: str = "data/embeddings/faiss.index"
     FAISS_DOCUMENTS_PATH: str = "data/embeddings/documents.pkl"
@@ -61,10 +60,6 @@ class Settings(BaseSettings):
         if raw == "*":
             return ["*"]
         return [x.strip() for x in raw.split(",") if x.strip()]
-    
-    class Config:
-        env_file = ".env"
-        case_sensitive = False
 
 settings = Settings()
 

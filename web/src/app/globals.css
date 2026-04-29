@@ -10,13 +10,13 @@
   --ring-focus: rgba(13, 148, 136, 0.35);
 }
 
-/* Batcave / “Batman” dark: near-black + gold utility accent */
+/* Dark: near-black + same teal accent as light */
 html.dark {
   --background: #050505;
   --foreground: #fafafa;
-  --accent: #d4af37;
-  --accent-muted: rgba(212, 175, 55, 0.14);
-  --ring-focus: rgba(212, 175, 55, 0.45);
+  --accent: #0d9488;
+  --accent-muted: rgba(13, 148, 136, 0.16);
+  --ring-focus: rgba(13, 148, 136, 0.4);
 }
 
 body {
@@ -62,7 +62,7 @@ body {
   @apply font-semibold text-slate-900 dark:text-white;
 }
 .rich-md code {
-  @apply rounded-md bg-slate-100 px-1.5 py-0.5 font-mono text-xs text-slate-800 dark:bg-neutral-800 dark:text-amber-100;
+  @apply rounded-md bg-slate-100 px-1.5 py-0.5 font-mono text-xs text-slate-800 dark:bg-neutral-800 dark:text-teal-100;
 }
 .rich-md pre {
   @apply my-3 overflow-x-auto rounded-xl bg-slate-900 p-4 text-xs text-slate-100 dark:bg-black dark:text-neutral-200;
@@ -85,24 +85,24 @@ body {
   @apply text-sm;
 }
 .rich-md a {
-  @apply text-teal-700 underline decoration-teal-400/40 underline-offset-2 transition hover:decoration-teal-600 dark:text-amber-400 dark:decoration-amber-500/40 dark:hover:text-amber-300;
+  @apply text-teal-700 underline decoration-teal-400/40 underline-offset-2 transition hover:decoration-teal-600 dark:text-teal-400 dark:decoration-teal-500/40 dark:hover:text-teal-300;
 }
 .rich-md blockquote {
-  @apply my-3 border-l-2 border-teal-500/40 pl-4 text-slate-600 italic dark:border-amber-500/55 dark:text-neutral-300;
+  @apply my-3 border-l-2 border-teal-500/40 pl-4 text-slate-600 italic dark:border-teal-500/50 dark:text-neutral-300;
 }
 
 @layer components {
   .btn-primary {
-    @apply inline-flex items-center justify-center gap-2 rounded-xl bg-teal-600 px-4 py-2.5 text-sm font-medium text-white shadow-sm shadow-teal-900/10 transition hover:bg-teal-500 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500/50 focus-visible:ring-offset-2 focus-visible:ring-offset-white disabled:pointer-events-none disabled:opacity-45 dark:bg-amber-600 dark:shadow-amber-950/40 dark:hover:bg-amber-500 dark:focus-visible:ring-amber-400/60 dark:focus-visible:ring-offset-[#050505];
+    @apply inline-flex items-center justify-center gap-2 rounded-xl bg-teal-600 px-4 py-2.5 text-sm font-medium text-white shadow-sm shadow-teal-900/10 transition hover:bg-teal-500 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500/50 focus-visible:ring-offset-2 focus-visible:ring-offset-white disabled:pointer-events-none disabled:opacity-45 dark:bg-teal-600 dark:shadow-teal-950/45 dark:hover:bg-teal-500 dark:focus-visible:ring-teal-400/55 dark:focus-visible:ring-offset-[#050505];
   }
   .btn-secondary {
-    @apply inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200/90 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 shadow-sm shadow-slate-900/5 transition hover:border-slate-300 hover:bg-slate-50 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500/30 focus-visible:ring-offset-2 focus-visible:ring-offset-white disabled:pointer-events-none disabled:opacity-45 dark:border-neutral-700 dark:bg-[#0a0a0a] dark:text-neutral-100 dark:shadow-none dark:hover:border-neutral-600 dark:hover:bg-neutral-900 dark:hover:text-white dark:focus-visible:ring-amber-500/35 dark:focus-visible:ring-offset-[#050505];
+    @apply inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200/90 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 shadow-sm shadow-slate-900/5 transition hover:border-slate-300 hover:bg-slate-50 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500/30 focus-visible:ring-offset-2 focus-visible:ring-offset-white disabled:pointer-events-none disabled:opacity-45 dark:border-neutral-700 dark:bg-[#0a0a0a] dark:text-neutral-100 dark:shadow-none dark:hover:border-neutral-600 dark:hover:bg-neutral-900 dark:hover:text-white dark:focus-visible:ring-teal-500/40 dark:focus-visible:ring-offset-[#050505];
   }
   .card {
     @apply rounded-2xl border border-slate-200/80 bg-white shadow-sm shadow-slate-900/[0.04] dark:border-neutral-800 dark:bg-[#0a0a0a] dark:shadow-xl dark:shadow-black/70;
   }
   .input-field {
-    @apply w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-900 shadow-sm placeholder:text-slate-400 transition focus:border-teal-500/50 focus:outline-none focus:ring-2 focus:ring-teal-500/20 dark:border-neutral-700 dark:bg-[#050505] dark:text-neutral-100 dark:placeholder:text-neutral-500 dark:focus:border-amber-500/45 dark:focus:ring-amber-500/25;
+    @apply w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-900 shadow-sm placeholder:text-slate-400 transition focus:border-teal-500/50 focus:outline-none focus:ring-2 focus:ring-teal-500/20 dark:border-neutral-700 dark:bg-[#050505] dark:text-neutral-100 dark:placeholder:text-neutral-500 dark:focus:border-teal-500/50 dark:focus:ring-teal-500/25;
   }
   .select-field {
     @apply input-field appearance-none bg-[length:1rem] bg-[right_0.75rem_center] bg-no-repeat pr-10;
@@ -139,7 +139,7 @@ html.dark .mesh-bg {
   background-image:
     radial-gradient(
       ellipse 110% 75% at 0% 0%,
-      rgba(212, 175, 55, 0.09),
+      rgba(13, 148, 136, 0.12),
       transparent 58%
     ),
     radial-gradient(

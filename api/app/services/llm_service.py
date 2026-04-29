@@ -1,108 +1,74 @@
 """
-Shared LLM service that supports multiple providers (Ollama, Groq, Hugging Face).
+LLM via Google Gemini (Google AI Studio / Generative Language API).
 """
 import requests
 from typing import Optional
 from app.config import settings
 
+
 def call_llm(prompt: str, system_prompt: Optional[str] = None, timeout: int = 30) -> str:
     """
-    Call LLM API based on configured provider.
-    
-    Args:
-        prompt: User prompt
-        system_prompt: Optional system prompt
-        timeout: Request timeout in seconds
-        
-    Returns:
-        LLM response text
+    Call Gemini with an optional system instruction.
+
+    Requires GOOGLE_API_KEY or GEMINI_API_KEY in the environment (see api/.env).
     """
-    provider = settings.LLM_PROVIDER.lower()
-    
-    if provider == "groq":
-        return _call_groq(prompt, system_prompt, timeout)
-    elif provider == "huggingface":
-        return _call_huggingface(prompt, system_prompt, timeout)
-    else:  # Default to Ollama
-        return _call_ollama(prompt, system_prompt, timeout)
-
-def _call_ollama(prompt: str, system_prompt: Optional[str] = None, timeout: int = 30) -> str:
-    """Call Ollama API."""
     try:
-        url = f"{settings.OLLAMA_BASE_URL}/api/generate"
-        payload = {
-            "model": settings.OLLAMA_MODEL,
-            "prompt": prompt,
-            "system": system_prompt or "",
-            "stream": False
-        }
-        response = requests.post(url, json=payload, timeout=timeout)
-        response.raise_for_status()
-        return response.json().get("response", "")
-    except Exception as e:
-        return f"Error calling Ollama: {str(e)}"
+        if not settings.GOOGLE_API_KEY:
+            return (
+                "Error: GOOGLE_API_KEY not set. Create a key at "
+                "https://aistudio.google.com/apikey and set GOOGLE_API_KEY or GEMINI_API_KEY in api/.env."
+            )
 
-def _call_groq(prompt: str, system_prompt: Optional[str] = None, timeout: int = 30) -> str:
-    """Call Groq API (free tier available)."""
-    try:
-        if not settings.GROQ_API_KEY:
-            return "Error: GROQ_API_KEY not set. Get a free API key from https://console.groq.com/"
-        
-        url = "https://api.groq.com/openai/v1/chat/completions"
-        headers = {
-            "Authorization": f"Bearer {settings.GROQ_API_KEY}",
-            "Content-Type": "application/json"
+        model_id = settings.GOOGLE_AI_MODEL.strip()
+        if model_id.startswith("models/"):
+            model_id = model_id[len("models/") :]
+
+        url = (
+            f"https://generativelanguage.googleapis.com/v1beta/models/"
+            f"{model_id}:generateContent"
+        )
+        body: dict = {
+            "contents": [{"role": "user", "parts": [{"text": prompt}]}],
         }
-        messages = []
         if system_prompt:
-            messages.append({"role": "system", "content": system_prompt})
-        messages.append({"role": "user", "content": prompt})
-        
-        payload = {
-            "model": settings.GROQ_MODEL,
-            "messages": messages,
-            "temperature": 0.7,
-            "max_tokens": 2048
-        }
-        response = requests.post(url, json=payload, headers=headers, timeout=timeout)
-        response.raise_for_status()
-        return response.json()["choices"][0]["message"]["content"]
-    except Exception as e:
-        return f"Error calling Groq API: {str(e)}"
+            body["systemInstruction"] = {"parts": [{"text": (system_prompt or "").strip()}]}
 
-def _call_huggingface(prompt: str, system_prompt: Optional[str] = None, timeout: int = 60) -> str:
-    """Call Hugging Face Inference API (free tier available)."""
-    try:
-        if not settings.HUGGINGFACE_API_KEY:
-            return "Error: HUGGINGFACE_API_KEY not set. Get a free API key from https://huggingface.co/settings/tokens"
-        
-        url = f"https://api-inference.huggingface.co/models/{settings.HUGGINGFACE_MODEL}"
-        headers = {
-            "Authorization": f"Bearer {settings.HUGGINGFACE_API_KEY}",
-            "Content-Type": "application/json"
-        }
-        
-        full_prompt = f"{system_prompt}\n\n{prompt}" if system_prompt else prompt
-        
-        payload = {
-            "inputs": full_prompt,
-            "parameters": {
-                "max_new_tokens": 512,
-                "temperature": 0.7,
-                "return_full_text": False
-            }
-        }
-        response = requests.post(url, json=payload, headers=headers, timeout=timeout)
-        response.raise_for_status()
-        result = response.json()
-        
-        # Handle different response formats
-        if isinstance(result, list) and len(result) > 0:
-            return result[0].get("generated_text", str(result[0]))
-        elif isinstance(result, dict) and "generated_text" in result:
-            return result["generated_text"]
-        else:
-            return str(result)
-    except Exception as e:
-        return f"Error calling Hugging Face API: {str(e)}"
+        response = requests.post(
+            url,
+            params={"key": settings.GOOGLE_API_KEY},
+            json=body,
+            timeout=timeout,
+        )
 
+        try:
+            data = response.json()
+        except Exception:
+            return f"Error calling Google Gemini API: invalid JSON ({response.status_code})"
+
+        if response.status_code != 200:
+            err = data.get("error") if isinstance(data, dict) else None
+            msg = err.get("message", response.text) if isinstance(err, dict) else response.text
+            return f"Error calling Google Gemini API (HTTP {response.status_code}): {msg}"
+
+        if not isinstance(data, dict):
+            return "Error calling Google Gemini API: unexpected response shape."
+
+        candidates = data.get("candidates") or []
+        if not candidates:
+            fb = data.get("promptFeedback")
+            block = (fb or {}).get("blockReason") if isinstance(fb, dict) else None
+            extra = f" ({block})" if block else ""
+            return f"Error: Gemini returned no candidates{extra}."
+
+        content = candidates[0].get("content") if isinstance(candidates[0], dict) else None
+        parts = (content or {}).get("parts") or [] if isinstance(content, dict) else []
+        texts = [p.get("text", "") for p in parts if isinstance(p, dict) and p.get("text")]
+        out = "".join(texts).strip()
+        if not out:
+            fr = candidates[0].get("finishReason") if isinstance(candidates[0], dict) else None
+            return f"Error: Gemini returned empty text" + (f" (finishReason={fr})." if fr else ".")
+        return out
+    except requests.exceptions.Timeout:
+        return "Error calling Google Gemini API: request timed out."
+    except Exception as e:
+        return f"Error calling Google Gemini API: {str(e)}"

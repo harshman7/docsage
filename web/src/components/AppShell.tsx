@@ -58,7 +58,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                     alt="DocSage"
                     width={176}
                     height={48}
-                    className="h-10 w-auto sm:h-11"
+                    className="h-10 w-auto sm:h-11 dark:hidden"
+                  />
+                  <Image
+                    src="/logo-dark.png"
+                    alt="DocSage"
+                    width={176}
+                    height={48}
+                    className="hidden h-10 w-auto sm:h-11 dark:block"
                   />
                   <div className="min-w-0 leading-tight">
                     <div className="font-display truncate text-sm font-semibold tracking-tight text-slate-900 dark:text-white">
@@ -91,8 +98,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                     href={href}
                     className={`flex items-center gap-2.5 whitespace-nowrap rounded-xl px-3 py-2.5 text-sm font-medium transition hover:scale-[1.01] active:scale-[0.99] ${
                       active
-                        ? "bg-teal-600 text-white shadow-sm shadow-teal-900/15 dark:bg-amber-500/20 dark:text-amber-300 dark:shadow-[0_0_28px_-6px_rgba(212,175,55,0.45)] dark:ring-1 dark:ring-amber-500/50"
-                        : "text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-neutral-400 dark:hover:bg-neutral-900/90 dark:hover:text-amber-100"
+                        ? "bg-teal-600 text-white shadow-sm shadow-teal-900/15 dark:bg-teal-600/90 dark:text-white dark:shadow-[0_0_28px_-6px_rgba(13,148,136,0.45)] dark:ring-1 dark:ring-teal-500/45"
+                        : "text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-neutral-400 dark:hover:bg-neutral-900/90 dark:hover:text-teal-100"
                     }`}
                   >
                     <Icon

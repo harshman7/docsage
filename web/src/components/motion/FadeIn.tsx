@@ -25,7 +25,8 @@ export function FadeIn({
       className={className}
       initial={{ opacity: 0, y }}
       whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true, margin: "-80px" }}
+      /* Generous rootMargin so sections already in view on first paint still intersect; avoids stuck opacity-0 */
+      viewport={{ once: true, amount: 0.05, margin: "0px 0px 120px 0px" }}
       transition={{ duration: 0.85, delay, ease: easeApple }}
     >
       {children}

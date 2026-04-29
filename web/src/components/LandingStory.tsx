@@ -7,8 +7,6 @@ import { ArrowRight } from "lucide-react";
 import { FadeIn } from "@/components/motion/FadeIn";
 import { ThemeToggle } from "@/components/ThemeToggle";
 
-const easeApple = [0.25, 0.1, 0.25, 1] as const;
-
 const pillars = [
   {
     title: "Documents, understood.",
@@ -30,7 +28,7 @@ export function LandingStory() {
   return (
     <div className="landing-story relative min-h-screen overflow-x-hidden bg-[#fbfbfd] text-neutral-900 dark:bg-[#050505] dark:text-neutral-100">
       <div
-        className="landing-quirk-blob pointer-events-none absolute -right-24 top-32 h-72 w-72 rounded-full bg-teal-400/20 blur-3xl dark:bg-amber-500/12"
+        className="landing-quirk-blob pointer-events-none absolute -right-24 top-32 h-72 w-72 rounded-full bg-teal-400/20 blur-3xl dark:bg-teal-500/10"
         aria-hidden
       />
       <div
@@ -51,7 +49,15 @@ export function LandingStory() {
                 alt="DocSage"
                 width={220}
                 height={60}
-                className="h-11 w-auto sm:h-14"
+                className="h-11 w-auto sm:h-14 dark:hidden"
+                priority
+              />
+              <Image
+                src="/logo-dark.png"
+                alt="DocSage"
+                width={220}
+                height={60}
+                className="hidden h-11 w-auto sm:h-14 dark:block"
                 priority
               />
             </Link>
@@ -65,7 +71,7 @@ export function LandingStory() {
             >
               <Link
                 href="/dashboard"
-                className="group inline-flex items-center gap-1 text-sm font-medium text-teal-700 transition hover:text-teal-600 dark:text-amber-400 dark:hover:text-amber-300"
+                className="group inline-flex items-center gap-1 text-sm font-medium text-teal-700 transition hover:text-teal-600 dark:text-teal-400 dark:hover:text-teal-300"
               >
                 Open app
                 <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
@@ -78,64 +84,28 @@ export function LandingStory() {
       <main>
         <section className="relative mx-auto max-w-6xl px-6 pb-28 pt-24 sm:px-8 sm:pb-40 sm:pt-28 md:pb-44 md:pt-36 lg:pt-44">
           <div
-            className="landing-quirk-dot pointer-events-none absolute right-[12%] top-8 h-3 w-3 rounded-full bg-teal-500/70 dark:bg-amber-500"
+            className="landing-quirk-dot pointer-events-none absolute right-[12%] top-8 h-3 w-3 rounded-full bg-teal-500/70 dark:bg-teal-500"
             aria-hidden
           />
-          {reduce ? (
-            <h1 className="max-w-4xl text-4xl font-semibold leading-[1.08] tracking-tight text-neutral-900 dark:text-white sm:text-6xl md:text-7xl md:leading-[1.05]">
-              Intelligence
-              <br />
-              for every document.
-            </h1>
-          ) : (
-            <motion.h1
-              className="max-w-4xl text-4xl font-semibold leading-[1.08] tracking-tight text-neutral-900 dark:text-white sm:text-6xl md:text-7xl md:leading-[1.05]"
-              initial={{ opacity: 0, y: 28 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.95, ease: easeApple }}
-            >
-              Intelligence
-              <br />
-              for every document.
-            </motion.h1>
-          )}
-          {reduce ? (
-            <p className="mt-10 max-w-xl text-lg leading-relaxed text-neutral-500 dark:text-neutral-400 sm:text-xl">
-              DocSage turns unstructured files into structured insight—quietly, precisely,
-              without the noise.
-            </p>
-          ) : (
-            <motion.p
-              className="mt-10 max-w-xl text-lg leading-relaxed text-neutral-500 dark:text-neutral-400 sm:text-xl"
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.85, delay: 0.12, ease: easeApple }}
-            >
-              DocSage turns unstructured files into structured insight—quietly, precisely,
-              without the noise.
-            </motion.p>
-          )}
+          {/* Static hero copy on first paint (avoids SSR/hydration stuck at opacity:0 before animate runs) */}
+          <h1 className="max-w-4xl text-4xl font-semibold leading-[1.08] tracking-tight text-neutral-900 dark:text-white sm:text-6xl md:text-7xl md:leading-[1.05]">
+            Intelligence
+            <br />
+            for every document.
+          </h1>
+          <p className="mt-10 max-w-xl text-lg leading-relaxed text-neutral-500 dark:text-neutral-400 sm:text-xl">
+            DocSage turns unstructured files into structured insight—quietly, precisely,
+            without the noise.
+          </p>
         </section>
 
         <section className="border-t border-black/[0.06] bg-white px-6 py-32 dark:border-neutral-800 dark:bg-[#0a0a0a] sm:px-8 md:py-40">
           <div className="mx-auto max-w-6xl">
             <FadeIn>
               <div className="max-w-3xl">
-                {reduce ? (
-                  <h2 className="text-3xl font-semibold tracking-tight text-neutral-900 dark:text-white sm:text-4xl">
-                    Our mission
-                  </h2>
-                ) : (
-                  <motion.h2
-                    className="text-3xl font-semibold tracking-tight text-neutral-900 dark:text-white sm:text-4xl"
-                    initial={{ opacity: 0, y: 18 }}
-                    whileInView={{ opacity: 1, y: 0 }}
-                    viewport={{ once: true, margin: "-80px" }}
-                    transition={{ type: "spring", stiffness: 320, damping: 28 }}
-                  >
-                    Our mission
-                  </motion.h2>
-                )}
+                <h2 className="text-3xl font-semibold tracking-tight text-neutral-900 dark:text-white sm:text-4xl">
+                  Our mission
+                </h2>
                 <p className="mt-6 text-lg leading-relaxed text-neutral-600 dark:text-neutral-300 sm:text-xl">
                   Help people and teams trust what is in their documents—without drowning in
                   folders, spreadsheets, or opaque tools.
@@ -156,7 +126,7 @@ export function LandingStory() {
           <div className="mx-auto max-w-6xl space-y-24 md:space-y-36">
             {pillars.map((pillar, i) => (
               <FadeIn key={pillar.title} delay={i * 0.06}>
-                <div className="group max-w-3xl rounded-2xl border border-transparent bg-transparent p-6 transition duration-300 hover:-translate-y-1 hover:border-teal-200/40 hover:bg-white/60 hover:shadow-lg hover:shadow-teal-900/5 dark:hover:border-amber-600/35 dark:hover:bg-amber-500/[0.06] dark:hover:shadow-[0_0_40px_-12px_rgba(212,175,55,0.15)] md:p-8">
+                <div className="group max-w-3xl rounded-2xl border border-transparent bg-transparent p-6 transition duration-300 hover:-translate-y-1 hover:border-teal-200/40 hover:bg-white/60 hover:shadow-lg hover:shadow-teal-900/5 dark:hover:border-teal-600/35 dark:hover:bg-teal-500/[0.06] dark:hover:shadow-[0_0_40px_-12px_rgba(13,148,136,0.18)] md:p-8">
                   <h2 className="text-3xl font-semibold tracking-tight text-neutral-900 dark:text-white sm:text-4xl md:text-5xl">
                     {pillar.title}
                   </h2>
@@ -182,7 +152,7 @@ export function LandingStory() {
               >
                 <Link
                   href="/dashboard"
-                  className="group inline-flex items-center gap-2 text-base font-medium text-teal-700 underline decoration-teal-400/40 underline-offset-[10px] transition hover:decoration-teal-600 dark:text-amber-400 dark:decoration-amber-500/45 dark:hover:text-amber-300 dark:hover:decoration-amber-400"
+                  className="group inline-flex items-center gap-2 text-base font-medium text-teal-700 underline decoration-teal-400/40 underline-offset-[10px] transition hover:decoration-teal-600 dark:text-teal-400 dark:decoration-teal-500/45 dark:hover:text-teal-300 dark:hover:decoration-teal-400"
                 >
                   Enter DocSage
                   <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />

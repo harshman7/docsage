@@ -41,7 +41,7 @@ export default function ChatPage() {
         <div className="flex-1 space-y-6">
           {msgs.length === 0 && (
             <div className="flex flex-col items-center justify-center py-12 text-center">
-              <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-teal-100 text-teal-700 dark:bg-amber-950/60 dark:text-amber-400 dark:ring-1 dark:ring-amber-600/30">
+              <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-teal-100 text-teal-700 dark:bg-teal-950/55 dark:text-teal-400 dark:ring-1 dark:ring-teal-600/30">
                 <Send className="h-5 w-5" strokeWidth={2} />
               </div>
               <p className="max-w-sm text-sm text-slate-600 dark:text-slate-300">
@@ -58,7 +58,7 @@ export default function ChatPage() {
               <div
                 className={`max-w-[min(100%,28rem)] rounded-2xl px-4 py-3 text-sm shadow-sm ${
                   m.role === "user"
-                    ? "bg-gradient-to-br from-teal-600 to-teal-700 text-white dark:from-amber-700 dark:to-amber-950 dark:text-amber-50"
+                    ? "bg-gradient-to-br from-teal-600 to-teal-700 text-white dark:from-teal-600 dark:to-teal-800 dark:text-white"
                     : "border border-slate-200 bg-slate-50 text-left text-slate-800 dark:border-neutral-700 dark:bg-[#0a0a0a] dark:text-neutral-100"
                 }`}
               >

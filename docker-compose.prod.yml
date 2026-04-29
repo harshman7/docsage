@@ -29,10 +29,8 @@ services:
       - POSTGRES_DB=${POSTGRES_DB:-docsage}
       - POSTGRES_PORT=5432
       - CORS_ORIGINS=${CORS_ORIGINS:-*}
-      - LLM_PROVIDER=${LLM_PROVIDER:-groq}
-      - GROQ_API_KEY=${GROQ_API_KEY}
-      - HUGGINGFACE_API_KEY=${HUGGINGFACE_API_KEY}
-      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://localhost:11434}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+      - GOOGLE_AI_MODEL=${GOOGLE_AI_MODEL:-gemini-3.1-flash-lite-preview}
     depends_on:
       postgres:
         condition: service_healthy

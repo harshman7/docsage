@@ -18,7 +18,7 @@ From the **repository root**:
 ./scripts/run-dev.sh
 ```
 
-Uses [`docker-compose.postgres.yml`](docker-compose.postgres.yml) for Postgres only (so optional LLM keys are not read by Compose when starting the DB). If Docker is not running, Postgres is skipped and the API + web still start; use `USE_SQLITE=true` in `api/.env`, or start **Docker Desktop** and run the script again.
+Uses [`docker-compose.postgres.yml`](docker-compose.postgres.yml) for Postgres only (so `GOOGLE_API_KEY` is not required for that step). If Docker is not running, Postgres is skipped and the API + web still start; use `USE_SQLITE=true` in `api/.env`, or start **Docker Desktop** and run the script again.
 
 The script also:
 

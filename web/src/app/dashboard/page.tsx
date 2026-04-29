@@ -66,7 +66,7 @@ export default function DashboardPage() {
               : "—"
           }
           icon={Wallet}
-          iconBg="from-teal-500/15 to-teal-600/5 text-teal-700 dark:from-amber-500/25 dark:to-amber-950/50 dark:text-amber-300"
+          iconBg="from-teal-500/15 to-teal-600/5 text-teal-700 dark:from-teal-950/80 dark:to-slate-950 dark:text-teal-300"
         />
         <Stat
           label="Avg transaction"
@@ -84,7 +84,7 @@ export default function DashboardPage() {
           label="Documents"
           value={summary?.document_count?.toLocaleString() ?? "—"}
           icon={FileText}
-          iconBg="from-amber-500/15 to-amber-600/5 text-amber-800 dark:from-amber-600/20 dark:to-amber-950 dark:text-amber-200"
+          iconBg="from-amber-500/15 to-amber-600/5 text-amber-800 dark:from-teal-800/25 dark:to-teal-950/60 dark:text-teal-200"
         />
       </div>
       <section className="mt-10">
@@ -115,7 +115,7 @@ function MonthlyChart({ data }: { data: { date: string; amount: number }[] }) {
   const dark = mounted && resolvedTheme === "dark";
   const tickFill = dark ? "#d4d4d4" : "rgb(100 116 139)";
   const gridStroke = dark ? "rgba(64, 64, 64, 0.85)" : "rgb(148 163 184 / 0.25)";
-  const lineColor = dark ? "#d4af37" : "#0d9488";
+  const lineColor = "#0d9488";
   const tooltipStyle = dark
     ? {
         borderRadius: 12,
@@ -183,7 +183,7 @@ function Stat({
   return (
     <div className="card group relative overflow-hidden p-4 transition hover:shadow-md sm:p-5">
       <div
-        className={`mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br ring-1 ring-black/5 dark:ring-amber-500/20 ${iconBg}`}
+        className={`mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br ring-1 ring-black/5 dark:ring-teal-500/25 ${iconBg}`}
       >
         <Icon className="h-5 w-5" strokeWidth={2} />
       </div>
