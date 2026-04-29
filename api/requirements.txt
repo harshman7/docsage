@@ -1,0 +1,36 @@
+# Core dependencies
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+sqlalchemy>=2.0.0
+pydantic>=2.0.0
+pydantic-settings>=2.0.0
+
+# Agent / orchestration
+langchain-core>=0.3.0
+langchain-community>=0.3.0
+langgraph>=0.2.20
+
+# IDP and OCR
+pytesseract>=0.3.10
+pdfplumber>=0.10.0
+Pillow>=10.0.0
+
+# Vector store and embeddings
+faiss-cpu>=1.7.4
+sentence-transformers>=2.2.0
+
+# Dataset downloading
+datasets>=2.14.0
+
+# LLM (Ollama via HTTP)
+requests>=2.31.0
+
+# Database
+psycopg2-binary>=2.9.0
+
+# Utilities
+python-dotenv>=1.0.0
+pandas>=2.0.0
+numpy>=1.24.0
+openpyxl>=3.1.0
+opencv-python>=4.8.0

@@ -19,7 +19,7 @@ services:
   api:
     build:
       context: .
-      dockerfile: Dockerfile.api
+      dockerfile: api/Dockerfile
     ports:
       - "${API_PORT:-8000}:8000"
     environment:
@@ -28,6 +28,7 @@ services:
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
       - POSTGRES_DB=${POSTGRES_DB:-docsage}
       - POSTGRES_PORT=5432
+      - CORS_ORIGINS=${CORS_ORIGINS:-*}
       - LLM_PROVIDER=${LLM_PROVIDER:-groq}
       - GROQ_API_KEY=${GROQ_API_KEY}
       - HUGGINGFACE_API_KEY=${HUGGINGFACE_API_KEY}
@@ -39,22 +40,5 @@ services:
     volumes:
       - ./data:/app/data
 
-  frontend:
-    build:
-      context: .
-      dockerfile: Dockerfile.frontend
-    ports:
-      - "${FRONTEND_PORT:-8501}:8501"
-    environment:
-      - API_HOST=${API_HOST:-api}
-      - API_PORT=8000
-    depends_on:
-      - api
-    restart: unless-stopped
-    volumes:
-      - ./data:/app/data
-      - ./image.png:/app/image.png
-
 volumes:
   postgres_data:
-
