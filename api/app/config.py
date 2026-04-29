@@ -35,7 +35,9 @@ class Settings(BaseSettings):
         default=None,
         validation_alias=AliasChoices("GOOGLE_API_KEY", "GEMINI_API_KEY"),
     )
-    GOOGLE_AI_MODEL: str = "gemini-3.1-flash-lite-preview"  # Gemini 3.1 Flash-Lite (preview)
+    GOOGLE_AI_MODEL: str = "gemini-3.1-flash-lite-preview"  # primary model id
+    # Comma-separated alternates tried in order when primary hits 429/503/etc. or unknown model
+    GOOGLE_AI_MODEL_FALLBACKS: str = "gemini-2.0-flash,gemini-2.5-flash"
 
     # Vector Store
     FAISS_INDEX_PATH: str = "data/embeddings/faiss.index"

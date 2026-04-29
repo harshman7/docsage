@@ -1,17 +1,28 @@
 """
 FastAPI entrypoint for DocSage.
 """
+from contextlib import asynccontextmanager
+
 from fastapi import APIRouter, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
+from app.db import init_db
 from app.schemas import QueryRequest, QueryResponse
 from app.routers import analytics, anomalies, chat, compare, documents, export_routes, receipts, report_routes
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    init_db()
+    yield
+
 
 app = FastAPI(
     title="DocSage",
     description="Intelligent Document Processing with agentic RAG and analytics APIs",
     version="2.0.0",
+    lifespan=lifespan,
 )
 
 cors_origins = settings.cors_origins_list

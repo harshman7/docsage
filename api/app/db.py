@@ -15,6 +15,14 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 Base = declarative_base()
 
+
+def init_db() -> None:
+    """Create all ORM tables if they do not exist (Postgres or SQLite)."""
+    import app.models  # noqa: F401 — register models on Base.metadata
+
+    Base.metadata.create_all(bind=engine)
+
+
 def get_db():
     """Dependency for getting database session."""
     db = SessionLocal()

@@ -58,18 +58,19 @@ Copy [`.env.example`](.env.example) to **`api/.env`** and set:
 | Variable | Description |
 |----------|-------------|
 | `GOOGLE_API_KEY` | Gemini API key (alias: `GEMINI_API_KEY`) |
-| `GOOGLE_AI_MODEL` | Model id for `generateContent` (default: `gemini-3.1-flash-lite-preview`) |
+| `GOOGLE_AI_MODEL` | Primary model id for `generateContent` |
+| `GOOGLE_AI_MODEL_FALLBACKS` | Comma-separated ids tried in order when the primary is overloaded or errors (defaults in code / Compose) |
 | `POSTGRES_*` | Database connection when using Postgres |
 | `USE_SQLITE` | Set `true` to use SQLite instead of Postgres |
 | `CORS_ORIGINS` | Comma-separated browser origins, or `*` (dev only) |
 
 The **web** app expects `NEXT_PUBLIC_API_URL` (e.g. `http://127.0.0.1:8000`) in `web/.env.local`; the dev script creates this if the file is missing.
 
-**Docker Compose** (`docker-compose.yml` / `docker-compose.prod.yml`): pass `GOOGLE_API_KEY` (and optionally `GOOGLE_AI_MODEL`) into the `api` service environment so LLM routes work inside the container.
+**Docker Compose** (`docker-compose.yml` / `docker-compose.prod.yml`): pass `GOOGLE_API_KEY`, optional `GOOGLE_AI_MODEL`, and `GOOGLE_AI_MODEL_FALLBACKS` into the `api` service so LLM routes work inside the container.
 
 ## LLM
 
-All text generation goes through **Gemini** via the [Generative Language API](https://ai.google.dev/api) (`generateContent`). There is no separate Groq, Ollama, or Hugging Face LLM integration in this repo.
+All text generation goes through **Gemini** via the [Generative Language API](https://ai.google.dev/api) (`generateContent`). The API tries `GOOGLE_AI_MODEL` first, then each id in `GOOGLE_AI_MODEL_FALLBACKS` (with retries on 429/503-style responses) before failing.
 
 ## API
 
