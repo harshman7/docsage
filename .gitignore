@@ -73,6 +73,9 @@ logs/
 # Streamlit
 .streamlit/
 
+# Local datasets (cloned or downloaded; large)
+/dataset/
+
 
 # Node.js / JavaScript
 node_modules/

@@ -18,20 +18,22 @@ From the **repository root**:
 ./scripts/run-dev.sh
 ```
 
-This script:
+Uses [`docker-compose.postgres.yml`](docker-compose.postgres.yml) for Postgres only (so optional LLM keys are not read by Compose when starting the DB). If Docker is not running, Postgres is skipped and the API + web still start; use `USE_SQLITE=true` in `api/.env`, or start **Docker Desktop** and run the script again.
 
-- Starts **Postgres** with `docker compose up -d postgres` (skipped with `./scripts/run-dev.sh --no-docker` if you use SQLite or manage Postgres yourself).
+The script also:
+
 - Ensures **`api/.env`** exists (copies `.env.example` once) and **`web/.env.local`** points `NEXT_PUBLIC_API_URL` at the API.
 - Creates **`api/.venv`**, installs Python deps, installs **web** deps if needed.
-- Runs **uvicorn** (reload) and **`npm run dev`** together until you press **Ctrl+C** (containers are left running unless you stop them separately).
+- Runs **uvicorn** (reload) and **`npm run dev`** together until you press **Ctrl+C** (Postgres container keeps running if it was started).
+
+Pass **`--no-docker`** to skip starting Postgres entirely.
 
 Ports: **`API_PORT`** (default `8000`), **`WEB_PORT`** (default `3000`).
-
 Open [http://localhost:3000](http://localhost:3000) (UI) and [http://localhost:8000/docs](http://localhost:8000/docs) (OpenAPI).
 
 ### Manual breakdown (optional)
 
-If you prefer three terminals: start Postgres (`docker compose up -d postgres`), run `uvicorn` from `api/` with `app.main:app`, and `npm run dev` from `web/`. Copy `.env.example` → `api/.env` and set `web/.env.local` as needed.
+Start Postgres with `docker compose -f docker-compose.postgres.yml up -d`, then run `uvicorn` from `api/` (`app.main:app`) and `npm run dev` from `web/`. Copy `.env.example` → `api/.env` and set `web/.env.local` as needed.
 
 ## API
 

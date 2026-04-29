@@ -7,10 +7,12 @@ cd "$ROOT"
 
 API_PORT="${API_PORT:-8000}"
 WEB_PORT="${WEB_PORT:-3000}"
+POSTGRES_COMPOSE="${ROOT}/docker-compose.postgres.yml"
 
 if [[ "${1:-}" == "-h" ]] || [[ "${1:-}" == "--help" ]]; then
   echo "Usage: $0 [--no-docker]"
-  echo "  Starts Postgres via docker compose (unless --no-docker), then API + web."
+  echo "  Starts Postgres via Docker (unless --no-docker), then API + web."
+  echo "  If Docker is not running, Postgres is skipped; use SQLite (USE_SQLITE=true in api/.env) or start Docker Desktop."
   echo "  Env: API_PORT (default $API_PORT), WEB_PORT (default $WEB_PORT)."
   exit 0
 fi
@@ -18,15 +20,34 @@ fi
 NO_DOCKER=false
 [[ "${1:-}" == "--no-docker" ]] && NO_DOCKER=true
 
-if [[ "$NO_DOCKER" == false ]] && command -v docker >/dev/null 2>&1; then
-  if docker compose version >/dev/null 2>&1; then
-    docker compose up -d postgres
-  elif command -v docker-compose >/dev/null 2>&1; then
-    docker-compose up -d postgres
+start_postgres_container() {
+  if [[ "$NO_DOCKER" == true ]]; then
+    echo "Skipping Postgres container (--no-docker)." >&2
+    return 0
   fi
-elif [[ "$NO_DOCKER" == false ]]; then
-  echo "Warning: docker not found; ensure Postgres is running (or use SQLite: set USE_SQLITE in api/.env)." >&2
-fi
+  if ! command -v docker >/dev/null 2>&1; then
+    echo "Docker not installed; skipping Postgres. Use USE_SQLITE=true in api/.env or install Docker for Postgres." >&2
+    return 0
+  fi
+  if ! docker info >/dev/null 2>&1; then
+    echo "Docker daemon not running; skipping Postgres container. Start Docker Desktop, or set USE_SQLITE=true in api/.env for a local DB without Docker." >&2
+    return 0
+  fi
+  if [[ ! -f "$POSTGRES_COMPOSE" ]]; then
+    echo "Missing $POSTGRES_COMPOSE" >&2
+    return 1
+  fi
+  if docker compose version >/dev/null 2>&1; then
+    docker compose -f "$POSTGRES_COMPOSE" up -d postgres
+  elif command -v docker-compose >/dev/null 2>&1; then
+    docker-compose -f "$POSTGRES_COMPOSE" up -d postgres
+  else
+    echo "docker compose not available; skipping Postgres." >&2
+    return 0
+  fi
+}
+
+start_postgres_container || true
 
 [[ -f api/.env ]] || cp .env.example api/.env
 [[ -f web/.env.local ]] || echo "NEXT_PUBLIC_API_URL=http://127.0.0.1:${API_PORT}" > web/.env.local
@@ -49,7 +70,7 @@ trap cleanup EXIT INT TERM
 
 echo "API  → http://127.0.0.1:${API_PORT}/docs"
 echo "Web  → http://127.0.0.1:${WEB_PORT}"
-echo "Ctrl+C stops API + web (Postgres keeps running)."
+echo "Ctrl+C stops API + web (Postgres container keeps running if started)."
 echo ""
 
 (
