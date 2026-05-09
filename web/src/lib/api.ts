@@ -1,8 +1,19 @@
 const base = (): string =>
   process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") || "http://localhost:8000";
 
+/** Public API origin (same as fetch base) — for `<img src>` preview URLs. */
+export function getApiOrigin(): string {
+  return base();
+}
+
 export async function apiGet<T>(path: string): Promise<T> {
   const res = await fetch(`${base()}/api/v1${path}`, { cache: "no-store" });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json() as Promise<T>;
+}
+
+export async function apiPost<T>(path: string): Promise<T> {
+  const res = await fetch(`${base()}/api/v1${path}`, { method: "POST" });
   if (!res.ok) throw new Error(await res.text());
   return res.json() as Promise<T>;
 }

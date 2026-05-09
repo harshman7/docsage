@@ -1,7 +1,8 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { FileUp, File } from "lucide-react";
+import Link from "next/link";
+import { File, FileUp, ChevronRight } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
 import { apiGet, apiUploadDocument } from "@/lib/api";
 
@@ -71,17 +72,24 @@ export default function DocumentsPage() {
               key={d.id}
               className="flex items-center justify-between gap-4 px-4 py-4 transition hover:bg-slate-50/80 dark:hover:bg-neutral-900 sm:px-5"
             >
-              <div className="flex min-w-0 items-center gap-3">
+              <Link
+                href={`/documents/${d.id}`}
+                className="flex min-w-0 flex-1 items-center gap-3 text-left"
+              >
                 <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-600 dark:bg-neutral-800 dark:text-neutral-200">
                   <File className="h-5 w-5" />
                 </div>
                 <span className="truncate font-medium text-slate-900 dark:text-white">
                   {d.filename}
                 </span>
-              </div>
-              <span className="shrink-0 rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-600 dark:bg-neutral-800 dark:text-neutral-300">
+              </Link>
+              <Link
+                href={`/documents/${d.id}`}
+                className="flex shrink-0 items-center gap-2 rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-600 transition hover:bg-teal-100 hover:text-teal-800 dark:bg-neutral-800 dark:text-neutral-300 dark:hover:bg-teal-950/50 dark:hover:text-teal-300"
+              >
                 {d.document_type}
-              </span>
+                <ChevronRight className="h-4 w-4 opacity-70" aria-hidden />
+              </Link>
             </li>
           ))
         ) : (

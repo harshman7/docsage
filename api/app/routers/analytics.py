@@ -1,5 +1,8 @@
 """Dashboard analytics endpoints."""
-from fastapi import APIRouter
+from datetime import date, datetime
+from typing import Optional
+
+from fastapi import APIRouter, Query
 from sqlalchemy import func
 from app.services.insights import InsightsService
 from app.db import SessionLocal
@@ -30,8 +33,33 @@ def summary():
 
 
 @router.get("/time-series")
-def time_series():
-    return InsightsService.get_time_series_data()
+def time_series(
+    preset: str = Query(
+        "all",
+        description="Time window: all, last_12_months, last_3_years, last_5_years",
+    ),
+    granularity: str = Query(
+        "auto",
+        description="Bucket size: auto, month, year (auto uses year if span > 3 years)",
+    ),
+    start: Optional[date] = Query(
+        None, description="Inclusive range start (override preset when both start and end set)"
+    ),
+    end: Optional[date] = Query(
+        None, description="Inclusive range end (override preset when both start and end set)"
+    ),
+):
+    start_dt: Optional[datetime] = None
+    end_dt: Optional[datetime] = None
+    if start is not None and end is not None:
+        start_dt = datetime.combine(start, datetime.min.time())
+        end_dt = datetime.combine(end, datetime.max.time())
+    return InsightsService.get_time_series_data(
+        preset=preset,
+        granularity=granularity,
+        start=start_dt,
+        end=end_dt,
+    )
 
 
 @router.get("/vendor-stats")

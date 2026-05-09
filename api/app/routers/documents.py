@@ -3,7 +3,7 @@ import io
 from pathlib import Path
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
@@ -15,10 +15,18 @@ from app.services.document_visualization import (
     create_annotated_document,
     get_extraction_confidence,
 )
-from app.services.idp_pipeline import parse_document
+from app.services.idp_pipeline import (
+    extract_amounts,
+    extract_dates,
+    extract_vendor,
+    parse_document,
+)
 from scripts.ingest_docs import extract_transactions_from_document
 
 router = APIRouter(prefix="/documents", tags=["documents"])
+
+_RAW_PREVIEW_LEN = 2000
+_IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".tiff", ".bmp", ".webp"}
 
 
 def _doc_to_response(doc: Document) -> DocumentResponse:
@@ -88,6 +96,111 @@ def get_document(document_id: int, db: Session = Depends(get_db)):
     if not doc:
         raise HTTPException(404, "Document not found")
     return _doc_to_response(doc)
+
+
+@router.get("/{document_id}/extraction-debug")
+def get_extraction_debug(document_id: int, db: Session = Depends(get_db)):
+    """Heuristic extraction from stored raw_text vs saved extracted_data (read-only)."""
+    doc = db.query(Document).filter(Document.id == document_id).first()
+    if not doc:
+        raise HTTPException(404, "Document not found")
+
+    raw = doc.raw_text or ""
+    path_str = doc.file_path or ""
+    fp = Path(path_str) if path_str else None
+    file_exists = bool(fp and fp.is_file())
+    synthetic = path_str.startswith("kaggle://")
+
+    suffix = fp.suffix.lower() if fp else ""
+    preview_available = file_exists and suffix in _IMAGE_SUFFIXES and not synthetic
+    preview_note: Optional[str] = None
+    if synthetic:
+        preview_note = "Synthetic seed row — no file on disk; annotated preview unavailable."
+    elif not path_str:
+        preview_note = "No file path on document record."
+    elif not file_exists:
+        preview_note = "File not found on disk (moved or deleted)."
+    elif suffix == ".pdf":
+        preview_note = "Annotated preview is for raster images only; PDF preview may fail on the preview endpoint."
+    elif not preview_available:
+        preview_note = "Preview expects PNG, JPEG, or similar raster formats."
+
+    extracted = doc.extracted_data or {}
+    confidence = get_extraction_confidence(extracted)
+
+    return {
+        "document_id": doc.id,
+        "filename": doc.filename,
+        "document_type": doc.document_type,
+        "file_path": doc.file_path,
+        "raw_text_length": len(raw),
+        "raw_text_preview": raw[:_RAW_PREVIEW_LEN],
+        "file_exists": file_exists,
+        "synthetic_source": synthetic,
+        "preview_available": preview_available,
+        "preview_note": preview_note,
+        "confidence": confidence,
+        "heuristics_from_raw_text": {
+            "amounts": extract_amounts(raw),
+            "dates": extract_dates(raw),
+            "vendor_guess": extract_vendor(raw),
+        },
+        "stored_extracted_data": extracted,
+    }
+
+
+@router.post("/{document_id}/reparse")
+def reparse_document(
+    document_id: int,
+    replace_transactions: bool = Query(
+        True,
+        description="Delete existing transactions for this document and insert new ones from re-extraction to avoid duplicates while debugging.",
+    ),
+    db: Session = Depends(get_db),
+):
+    """Re-run parse_document on the stored file and update DB (local files only)."""
+    doc = db.query(Document).filter(Document.id == document_id).first()
+    if not doc:
+        raise HTTPException(404, "Document not found")
+    path_str = doc.file_path or ""
+    if path_str.startswith("kaggle://"):
+        raise HTTPException(
+            400,
+            "Cannot reparse synthetic seed documents (no source file on disk).",
+        )
+    fp = Path(path_str)
+    if not path_str or not fp.is_file():
+        raise HTTPException(
+            400,
+            "Cannot reparse: file path missing or file not on disk.",
+        )
+
+    result = parse_document(str(fp))
+    doc.document_type = result.get("document_type", "unknown")
+    doc.raw_text = result.get("raw_text", "")
+    doc.extracted_data = result.get("extracted_data") or {}
+
+    new_txn_count = 0
+    if replace_transactions:
+        db.query(Transaction).filter(Transaction.document_id == document_id).delete(
+            synchronize_session=False
+        )
+        db.flush()
+        extr = result.get("extracted_data") or {}
+        for txn_data in extract_transactions_from_document(doc, extr):
+            db.add(Transaction(**txn_data))
+            new_txn_count += 1
+
+    db.commit()
+    db.refresh(doc)
+
+    return {
+        "ok": True,
+        "document_id": doc.id,
+        "document_type": doc.document_type,
+        "transactions_replaced": replace_transactions,
+        "transactions_inserted": new_txn_count if replace_transactions else None,
+    }
 
 
 @router.get("/{document_id}/detail")

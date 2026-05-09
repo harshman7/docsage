@@ -2,10 +2,16 @@
 Precomputed metrics: monthly spend, vendor stats, etc.
 """
 from datetime import datetime, timedelta
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Tuple
 from sqlalchemy import func
 from app.db import SessionLocal
 from app.models import Transaction
+
+# Presets aligned with dashboard query params
+TIME_SERIES_PRESETS = frozenset(
+    {"all", "last_12_months", "last_3_years", "last_5_years"}
+)
+GRANULARITIES = frozenset({"auto", "month", "year"})
 
 class InsightsService:
     """Service for computing insights from transaction data."""
@@ -80,70 +86,169 @@ class InsightsService:
             ]
     
     @staticmethod
-    def get_time_series_data(start_date: Optional[datetime] = None, end_date: Optional[datetime] = None) -> Dict[str, Any]:
-        """Get time series data for spending trends."""
+    def _resolve_time_window(
+        db,
+        preset: str,
+        start_override: Optional[datetime],
+        end_override: Optional[datetime],
+    ) -> Tuple[Optional[datetime], Optional[datetime]]:
+        """Return inclusive [start, end] for Transaction.date filtering."""
+        now = datetime.now()
+
+        if start_override is not None and end_override is not None:
+            return start_override, end_override
+
+        if preset == "all":
+            row = (
+                db.query(
+                    func.min(Transaction.date).label("dmin"),
+                    func.max(Transaction.date).label("dmax"),
+                )
+                .filter(Transaction.date.isnot(None))
+                .first()
+            )
+            if row is None or row.dmin is None:
+                return None, None
+            return row.dmin, row.dmax
+
+        if preset == "last_12_months":
+            return now - timedelta(days=365), now
+        if preset == "last_3_years":
+            return now - timedelta(days=365 * 3), now
+        if preset == "last_5_years":
+            return now - timedelta(days=365 * 5), now
+
+        row = (
+            db.query(
+                func.min(Transaction.date).label("dmin"),
+                func.max(Transaction.date).label("dmax"),
+            )
+            .filter(Transaction.date.isnot(None))
+            .first()
+        )
+        if row is None or row.dmin is None:
+            return None, None
+        return row.dmin, row.dmax
+
+    @staticmethod
+    def get_time_series_data(
+        preset: str = "all",
+        granularity: str = "auto",
+        start: Optional[datetime] = None,
+        end: Optional[datetime] = None,
+    ) -> Dict[str, Any]:
+        """
+        Spending time series with presets, optional custom range, and month/year granularity.
+
+        preset: all | last_12_months | last_3_years | last_5_years
+        granularity: auto (year if span > 3y else month) | month | year
+        start/end: optional inclusive bounds (override preset when both set)
+        """
+        preset = preset if preset in TIME_SERIES_PRESETS else "all"
+        granularity = granularity if granularity in GRANULARITIES else "auto"
+
         with SessionLocal() as db:
-            if not start_date:
-                # Default to last 12 months
-                end_date = end_date or datetime.now()
-                start_date = end_date - timedelta(days=365)
-            
-            transactions = db.query(Transaction).filter(
-                Transaction.date >= start_date,
-                Transaction.date <= end_date
-            ).all()
-            
-            if not transactions:
+            without_date = (
+                db.query(func.count(Transaction.id))
+                .filter(Transaction.date.is_(None))
+                .scalar()
+                or 0
+            )
+
+            start_date, end_date = InsightsService._resolve_time_window(
+                db, preset, start, end
+            )
+            if start_date is None or end_date is None:
                 return {
                     "daily": [],
                     "monthly": [],
-                    "vendor_trends": []
+                    "yearly": [],
+                    "granularity": "month",
+                    "range": {"start": None, "end": None},
+                    "transactions_in_range": 0,
+                    "transactions_without_date": int(without_date),
+                    "vendor_trends": {},
                 }
-            
-            # Convert to DataFrame-like structure
-            daily_data = {}
-            monthly_data = {}
-            vendor_monthly = {}
-            
+
+            transactions = (
+                db.query(Transaction)
+                .filter(
+                    Transaction.date >= start_date,
+                    Transaction.date <= end_date,
+                )
+                .all()
+            )
+
+            span_days = (end_date - start_date).days + 1
+            if granularity == "auto":
+                resolved = "year" if span_days > 3 * 365 else "month"
+            elif granularity == "year":
+                resolved = "year"
+            else:
+                resolved = "month"
+
+            daily_data: Dict[str, float] = {}
+            monthly_data: Dict[str, float] = {}
+            yearly_data: Dict[str, float] = {}
+            vendor_monthly: Dict[str, float] = {}
+
             for txn in transactions:
-                date = txn.date
-                if not date:
+                d = txn.date
+                if not d:
                     continue
-                
-                # Daily aggregation
-                day_key = date.strftime("%Y-%m-%d")
+
+                day_key = d.strftime("%Y-%m-%d")
                 daily_data[day_key] = daily_data.get(day_key, 0) + txn.amount
-                
-                # Monthly aggregation
-                month_key = date.strftime("%Y-%m")
+                month_key = d.strftime("%Y-%m")
                 monthly_data[month_key] = monthly_data.get(month_key, 0) + txn.amount
-                
-                # Vendor monthly
+                year_key = d.strftime("%Y")
+                yearly_data[year_key] = yearly_data.get(year_key, 0) + txn.amount
+
                 if txn.vendor:
-                    vendor_key = f"{txn.vendor}|{month_key}"
-                    vendor_monthly[vendor_key] = vendor_monthly.get(vendor_key, 0) + txn.amount
-            
-            # Format for frontend
-            daily_list = [{"date": k, "amount": v} for k, v in sorted(daily_data.items())]
-            monthly_list = [{"date": k, "amount": v} for k, v in sorted(monthly_data.items())]
-            
-            # Top vendors over time
-            vendor_trends = {}
+                    vk = f"{txn.vendor}|{month_key}"
+                    vendor_monthly[vk] = vendor_monthly.get(vk, 0) + txn.amount
+
+            daily_list: List[Dict[str, Any]] = []
+            if span_days <= 366:
+                daily_list = [
+                    {"date": k, "amount": v} for k, v in sorted(daily_data.items())
+                ]
+
+            monthly_list = [
+                {"date": k, "amount": v} for k, v in sorted(monthly_data.items())
+            ]
+            yearly_list = [
+                {"date": k, "amount": v} for k, v in sorted(yearly_data.items())
+            ]
+
+            vendor_trends: Dict[str, List[Dict[str, Any]]] = {}
             for key, amount in vendor_monthly.items():
-                vendor, month = key.split("|")
-                if vendor not in vendor_trends:
-                    vendor_trends[vendor] = []
-                vendor_trends[vendor].append({"date": month, "amount": amount})
-            
-            # Get top 5 vendors
-            vendor_totals = {v: sum(item["amount"] for item in items) for v, items in vendor_trends.items()}
+                vendor_name, month = key.rsplit("|", 1)
+                if vendor_name not in vendor_trends:
+                    vendor_trends[vendor_name] = []
+                vendor_trends[vendor_name].append({"date": month, "amount": amount})
+
+            vendor_totals = {
+                v: sum(item["amount"] for item in items)
+                for v, items in vendor_trends.items()
+            }
             top_vendors = sorted(vendor_totals.items(), key=lambda x: x[1], reverse=True)[:5]
-            top_vendor_trends = {v: sorted(vendor_trends[v], key=lambda x: x["date"]) for v, _ in top_vendors}
-            
+            top_vendor_trends = {
+                v: sorted(vendor_trends[v], key=lambda x: x["date"]) for v, _ in top_vendors
+            }
+
             return {
                 "daily": daily_list,
                 "monthly": monthly_list,
-                "vendor_trends": top_vendor_trends
+                "yearly": yearly_list,
+                "granularity": resolved,
+                "range": {
+                    "start": start_date.isoformat(),
+                    "end": end_date.isoformat(),
+                },
+                "transactions_in_range": len(transactions),
+                "transactions_without_date": int(without_date),
+                "vendor_trends": top_vendor_trends,
             }
     
     @staticmethod

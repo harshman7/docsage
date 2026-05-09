@@ -22,6 +22,7 @@ sentence-transformers>=2.2.0
 
 # Dataset downloading
 datasets>=2.14.0
+kagglehub[pandas-datasets]>=0.3.0
 
 # LLM (Gemini via Generative Language API — HTTP)
 requests>=2.31.0

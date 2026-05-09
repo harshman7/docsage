@@ -1,7 +1,7 @@
 """
 Anomaly detection for invoices and transactions.
 """
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from datetime import datetime, timedelta
 from sqlalchemy import func
 from app.db import SessionLocal
@@ -9,6 +9,18 @@ from app.models import Document, Transaction
 
 class AnomalyDetector:
     """Detect anomalies in documents and transactions."""
+
+    @staticmethod
+    def _is_kaggle_synthetic(db, document_id: Optional[int]) -> bool:
+        if document_id is None:
+            return False
+        row = (
+            db.query(Document.file_path)
+            .filter(Document.id == document_id)
+            .first()
+        )
+        fp = row[0] if row else None
+        return bool(fp and fp.startswith("kaggle://"))
     
     @staticmethod
     def detect_duplicates() -> List[Dict[str, Any]]:
@@ -143,6 +155,8 @@ class AnomalyDetector:
             ).all()
             
             for txn in future_txns:
+                if AnomalyDetector._is_kaggle_synthetic(db, txn.document_id):
+                    continue
                 anomalies.append({
                     "type": "future_date",
                     "severity": "high",
@@ -153,6 +167,8 @@ class AnomalyDetector:
                 })
             
             for txn in old_txns:
+                if AnomalyDetector._is_kaggle_synthetic(db, txn.document_id):
+                    continue
                 anomalies.append({
                     "type": "old_date",
                     "severity": "low",
