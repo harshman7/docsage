@@ -27,8 +27,8 @@
 1. **Upload** documents (PDF, images, etc.) via the API or UI.
 2. **Parse** them through an **IDP-style** pipeline: text extraction (PDF and/or OCR), heuristic **classification**, and structured field extraction.
 3. **Store** `Document` rows plus derived **`Transaction`** rows in **PostgreSQL** or **SQLite**.
-4. **Index** optional text chunks in **FAISS** for **RAG** (Retrieval-Augmented Generation).
-5. **Answer questions** via **`POST /api/v1/chat/insights`**: a **LangGraph** workflow can route between fast analytic paths, **SQL-over-schema** answers, and full **retrieve → rerank → grade → synthesize** agentic RAG with **HyDE**-style query rewriting.
+4. **Index** in **FAISS** for **RAG**: per document, an **`extraction_summary`** chunk (from structured **`extracted_data`**) when present, plus chunked **`raw_text`**—each chunk carries **`chunk_type`**, **`chunk_index`**, and document metadata for **grounding** in API responses.
+5. **Answer questions** via **`POST /api/v1/chat/insights`**: a **LangGraph** workflow can route between fast analytic paths, **SQL** over **`documents` + `transactions`** (with **JOIN** on `document_id`), and full **retrieve → rerank → grade → synthesize** agentic RAG with **HyDE**-style query rewriting. Optional **`history`** on the request enables **multi-turn** chat (last **20** turns used server-side); synthesis prompts insist on **filename** / **document_id** citations when evidence exists.
 
 ```mermaid
 flowchart LR
@@ -58,7 +58,7 @@ flowchart LR
 |------|------|
 | [`api/`](api/) | Python package **`app`**: FastAPI entry [`api/app/main.py`](api/app/main.py), routers, services, agents, models, [`api/requirements.txt`](api/requirements.txt), [`api/Dockerfile`](api/Dockerfile). |
 | [`api/app/routers/`](api/app/routers/) | HTTP route modules (analytics, documents, chat, anomalies, compare, receipts, export, insights report). |
-| [`api/app/services/`](api/app/services/) | Business logic: RAG, LLM wrapper, IDP pipeline, SQL tools, insights, anomalies, export, etc. |
+| [`api/app/services/`](api/app/services/) | Business logic: RAG, LLM wrapper, IDP pipeline, SQL tools, **`extraction_summary`** helper ([`extraction_summary.py`](api/app/services/extraction_summary.py)), insights, anomalies, export, etc. |
 | [`api/app/agents/`](api/app/agents/) | LangGraph graph compiler, nodes, state, [`langgraph_runner.py`](api/app/agents/langgraph_runner.py). |
 | [`api/app/vectorstore/`](api/app/vectorstore/) | [`faiss_store.py`](api/app/vectorstore/faiss_store.py): FAISS + embeddings. |
 | [`api/scripts/`](api/scripts/) | Operational scripts (seed, ingest, embeddings, diagnostics)—not started automatically. |
@@ -70,7 +70,7 @@ flowchart LR
 | [`docker-compose.prod.yml`](docker-compose.prod.yml) | Production-oriented Compose example. |
 | [`railway.toml`](railway.toml) | Railway: Dockerfile build, uvicorn start, `/health`. |
 | [`.env.example`](.env.example) | Template for **`api/.env`** (copy into `api/`). |
-| [`data/`](data/) | Runtime data: `raw_docs`, `embeddings`, `processed` (most patterns gitignored). |
+| `data/` (under **`api/`** at runtime) | Uploads and indexes: `raw_docs`, `embeddings`, `processed`—paths come from [`config.py`](api/app/config.py) (`RAW_DOCS_PATH`, `FAISS_*`, etc.) relative to the API working directory. Do not commit large **`api/data/`** trees; keep them local or on a volume. |
 
 ---
 
@@ -154,7 +154,9 @@ Routers use **`Depends(get_db)`** for request-scoped sessions.
 
 ### Validation
 
-[`api/app/schemas.py`](api/app/schemas.py) defines **Pydantic** models for HTTP I/O. Notable: **`QueryRequest`** exposes **`use_rag`** and **`use_sql`**, which the chat graph consumes to bias routing (e.g. SQL-only path when RAG is off and keywords suggest aggregation).
+[`api/app/schemas.py`](api/app/schemas.py) defines **Pydantic** models for HTTP I/O. Notable:
+
+- **`QueryRequest`**: **`query`**, **`use_rag`**, **`use_sql`**, optional **`history`** (`List[ChatMessage]` with **`role`** and **`content`**). The chat router keeps the last **20** turns with non-empty content. **`use_rag`** / **`use_sql`** bias LangGraph routing (e.g. SQL-only path when RAG is off and keywords suggest aggregation).
 
 ---
 
@@ -190,25 +192,25 @@ Each item: **what the concept is**, then **how DocSage applies it** (files).
 
 An **embedding** is a dense vector representing text (or other modalities) in a space where **semantic similarity** ≈ **vector proximity**.
 
-**DocSage:** **`SentenceTransformer`** in [`api/app/vectorstore/faiss_store.py`](api/app/vectorstore/faiss_store.py) encodes strings; default model **`all-MiniLM-L6-v2`** produces **384-dimensional** vectors (`EMBEDDING_MODEL` in config).
+**DocSage:** **`SentenceTransformer`** in [`api/app/vectorstore/faiss_store.py`](api/app/vectorstore/faiss_store.py) encodes strings; default model **`all-MiniLM-L6-v2`** produces **384-dimensional** vectors (`EMBEDDING_MODEL` in config). [`api/scripts/build_embeddings.py`](api/scripts/build_embeddings.py) walks all **`Document`** rows and, for each, emits (**1**) a single **`extraction_summary`** string via **`extraction_to_index_text`** ([`extraction_summary.py`](api/app/services/extraction_summary.py)) when **`extracted_data`** is present, and (**2**) sliding-window chunks over **`raw_text`** when present. Metadata on each vector row includes **`chunk_type`** (`extraction_summary` vs `raw_text`), **`chunk_index`**, **`total_chunks`** (for raw splits), and document id/filename—used downstream for **rerank `sources`** and UI citations.
 
 ### Vector store and approximate search (FAISS)
 
 A **vector store** indexes vectors for **nearest-neighbor** search (which chunks are closest to the query embedding).
 
-**DocSage:** **FAISS** **`IndexFlatL2`**—exact L2 search over all vectors (simple, no training). Index and parallel **pickle** list of metadata are saved to **`FAISS_INDEX_PATH`** / **`FAISS_DOCUMENTS_PATH`**. [`RAGService`](api/app/services/rag.py) loads the index if files exist and exposes **`search(query, k)`**.
+**DocSage:** **FAISS** **`IndexFlatL2`**—exact L2 search over all vectors (simple, no training). Index and parallel **pickle** list of metadata are saved to **`FAISS_INDEX_PATH`** / **`FAISS_DOCUMENTS_PATH`** (relative to API cwd, typically **`api/data/embeddings/`** in local dev). [`RAGService`](api/app/services/rag.py) loads the index **if files exist** and exposes **`search(query, k)`**.
 
 ### RAG (Retrieval-Augmented Generation)
 
 **RAG** grounds LLM answers in **retrieved passages** from a corpus instead of parametric memory alone, reducing hallucination on factual questions about *your* documents.
 
-**DocSage:** [`RAGService`](api/app/services/rag.py) wraps the FAISS store; LangGraph nodes call **`search`** with a rewritten query after **HyDE** and optional **reranking** ([`api/app/agents/langgraph/nodes.py`](api/app/agents/langgraph/nodes.py)).
+**DocSage:** [`RAGService`](api/app/services/rag.py) wraps the FAISS store; LangGraph nodes call **`search`** with a rewritten query after **HyDE** and optional **reranking** ([`api/app/agents/langgraph/nodes.py`](api/app/agents/langgraph/nodes.py)). **`node_rerank`** / **`node_synthesize`** attach **`sources`**: **`document_id`**, **`filename`**, **`chunk_index`**, **`chunk_type`**, **`score`** for citation-style UX; final synthesis instructs the model to cite filename and document id when evidence exists and to avoid inventing facts when context and SQL are empty.
 
 ### LangGraph and agentic control flow
 
 **LangGraph** models an agent as a **state machine**: **nodes** (functions) update **state**; **edges** (conditional or fixed) choose the next step. “Agentic” here means **multiple LLM and tool steps** with branching, not a single prompt.
 
-**DocSage:** [`build_agent_graph`](api/app/agents/langgraph/graph.py) compiles a **`StateGraph`** over **`AgentState`** ([`api/app/agents/langgraph/state.py`](api/app/agents/langgraph/state.py)). [`run_agent_pipeline`](api/app/agents/langgraph_runner.py) invokes the compiled graph with **`graph.invoke`**, then shapes the response for the REST API.
+**DocSage:** [`build_agent_graph`](api/app/agents/langgraph/graph.py) compiles a **`StateGraph`** over **`AgentState`** ([`api/app/agents/langgraph/state.py`](api/app/agents/langgraph/state.py)) including optional **`history`** for multi-turn prompts. [`run_agent_pipeline`](api/app/agents/langgraph_runner.py) invokes the compiled graph with **`graph.invoke`**, then shapes the response for the REST API.
 
 **LangChain packages** in [`api/requirements.txt`](api/requirements.txt) (`langchain-core`, `langchain-community`) support the broader ecosystem; application code under `app/` imports **LangGraph** directly rather than high-level LangChain chains.
 
@@ -216,7 +218,7 @@ A **vector store** indexes vectors for **nearest-neighbor** search (which chunks
 
 **HyDE** asks the LLM to **draft a fake answer or passage** that would answer the question; that text is **embedded and used to retrieve** real chunks. It often improves recall when the raw user question is short or mismatched to chunk wording.
 
-**DocSage:** **`node_hyde_rewrite`** in [`nodes.py`](api/app/agents/langgraph/nodes.py) calls **`call_llm`** to produce a hypothetical block; retrieval uses the rewritten text (see also **`refinement_hint`** on failed grades).
+**DocSage:** **`node_hyde_rewrite`** in [`nodes.py`](api/app/agents/langgraph/nodes.py) calls **`call_llm`** to produce a hypothetical block; retrieval uses the rewritten text (see also **`refinement_hint`** on failed grades). **HyDE**, grading, SQL generation, and synthesis prompts also receive a compact **conversation** block from **`history`** when the client sends prior turns.
 
 ### Retrieval depth, cross-encoder reranking, and grading loop
 
@@ -228,7 +230,7 @@ A **vector store** indexes vectors for **nearest-neighbor** search (which chunks
 
 **Grounding** here means the LLM sees the **real table schema** and **sample rows** before emitting **read-only SQL** executed against your DB.
 
-**DocSage:** [**`SQLTools`**](api/app/services/sql_tools.py) introspects **`transactions`**; **`_generate_sql`** builds a prompt with JSON schema + samples, **`call_llm`** returns a candidate **`SELECT`**, stripped of markdown fences. **`node_sql_only`** and **`node_optional_sql`** integrate SQL results into answers ([`nodes.py`](api/app/agents/langgraph/nodes.py)).
+**DocSage:** [**`SQLTools`**](api/app/services/sql_tools.py) introspects **`transactions`** for low-level helpers and exposes **`get_multitable_sql_llm_context()`**—combined **`documents`** + **`transactions`** schemas, truncated **`raw_text`** previews, and shrunk **`extracted_data`** in document samples (SQLite vs Postgres aware). **`_generate_sql`** in [`nodes.py`](api/app/agents/langgraph/nodes.py) includes that context, the user question, and a short **conversation** block from **`history`**, and explains that **`transactions.document_id`** references **`documents.id`** (**`JOIN`** allowed). **`node_sql_only`** and **`node_optional_sql`** merge SQL results into answers; optional SQL is keyword-gated (including document/invoice-style terms).
 
 ### Fast analytic path (metrics shortcut)
 
@@ -291,8 +293,9 @@ flowchart TD
 [`api/app/routers/chat.py`](api/app/routers/chat.py):
 
 - Lazily constructs a singleton **`RAGService`** (loads FAISS if index files exist).
-- **`run_chat`** calls **`run_agent_pipeline(query, rag, use_rag=..., use_sql=...)`**.
-- Returns **`QueryResponse`**: **`answer`**, **`sources`**, **`sql_query`**, **`steps`**, **`tool_calls`** (derived from steps for UI convenience).
+- **`run_chat`** maps **`request.history`** to the graph (last **20** non-empty turns).
+- **`run_chat`** calls **`run_agent_pipeline(query, rag, use_rag=..., use_sql=..., history=...)`**.
+- Returns **`QueryResponse`**: **`answer`**, **`sources`** (list of dicts with **`document_id`**, **`filename`**, **`chunk_index`**, **`chunk_type`**, **`score`** when RAG ran), **`sql_query`**, **`steps`**, **`tool_calls`** (derived from steps for UI convenience).
 
 **When RAG is “skipped” in spirit:** `use_rag=False` with SQL-biased routing yields **`sql_only`**. **`use_rag=False`** also clears sources in the runner output. **`use_sql=False`** disables the optional SQL augmentation node path in the graph state.
 
@@ -308,7 +311,13 @@ Several features call **`call_llm`** directly without LangGraph: e.g. **insights
 2. File bytes saved under **`RAW_DOCS_PATH`**.
 3. **`parse_document(path)`** runs the IDP pipeline ([`idp_pipeline.py`](api/app/services/idp_pipeline.py)).
 4. **`Document`** inserted; **`extract_transactions_from_document`** yields dicts → **`Transaction`** rows committed.
-5. **FAISS** is **not** automatically rebuilt on every upload in this path. To refresh vectors, use **[`api/scripts/build_embeddings.py`](api/scripts/build_embeddings.py)** or **`RAGService.build_index` / `add_documents`** ([`rag.py`](api/app/services/rag.py)) as part of your ops workflow. **`add_documents`** currently rebuilds the full index for simplicity.
+5. **FAISS** is **not** automatically rebuilt on every upload. After new imports, **extraction** changes, or IDP tweaks, refresh vectors so **`extraction_summary`** and **`raw_text`** chunks stay in sync—for example:
+
+   ```bash
+   cd api && ./.venv/bin/python scripts/build_embeddings.py
+   ```
+
+   You can also use **`RAGService.build_index`** / **`add_documents`** ([`rag.py`](api/app/services/rag.py)) in custom ops; **`add_documents`** currently rebuilds the full index for simplicity.
 
 ---
 
@@ -325,7 +334,7 @@ All v1 routes are prefixed with **`/api/v1`** unless noted.
 | | GET | `/analytics/spending-forecast` | Simple forward-looking projection. |
 | | GET | `/analytics/monthly-spend` | Spend for a given year/month. |
 | **anomalies** | GET | `/anomalies` | Rule-based anomaly list. |
-| **chat** | POST | `/chat/insights` | Agentic RAG + SQL pipeline (`QueryRequest`). |
+| **chat** | POST | `/chat/insights` | Agentic RAG + SQL pipeline. Body: **`query`** (required), **`use_rag`**, **`use_sql`**, optional **`history`** (array of `{ role, content }`, server uses last 20 non-empty turns). |
 | **compare** | GET | `/documents/{document_id}/similar` | Similar documents (e.g. shared vendor / join logic in service). |
 | | POST | `/documents/compare` | Pairwise diff / compare (`CompareBody`). |
 | **documents** | GET | `/documents` | List documents (filters, pagination). |
@@ -351,6 +360,7 @@ Interactive docs: **`/docs`** (Swagger UI).
 
 - **Framework:** **Next.js 14** **App Router** — file-based routes under [`web/src/app/`](web/src/app/).
 - **Data fetching:** [`@tanstack/react-query`](web/package.json) on dashboard and other data screens; **`fetch`** wrappers in [`web/src/lib/api.ts`](web/src/lib/api.ts) target **`${NEXT_PUBLIC_API_URL}/api/v1`**.
+- **Chat:** [`chat/page.tsx`](web/src/app/chat/page.tsx) sends the **last 20** user/assistant turns as **`history`** with each **`POST /chat/insights`** request so follow-up questions keep context server-side.
 - **Theming:** **`next-themes`** with Tailwind **`darkMode: "class"`**; landing vs app shell split in [`web/src/components/ShellLayout.tsx`](web/src/components/ShellLayout.tsx) (`/` uses marketing layout; other routes use [`AppShell`](web/src/components/AppShell.tsx) sidebar).
 - **Motion:** **Framer Motion** primitives ([`web/src/components/motion/`](web/src/components/motion/)).
 - **Icons / branding:** logos in [`web/public/`](web/public/) (`logo.png`, `logo-dark.png`); favicons **`favicon.ico`**, **`icon.png`**, **`apple-icon.png`** with **`metadata.icons`** in [`layout.tsx`](web/src/app/layout.tsx).
@@ -374,7 +384,7 @@ Interactive docs: **`/docs`** (Swagger UI).
 
 ### Operational scripts ([`api/scripts/`](api/scripts/))
 
-Not invoked by default: **`seed_db.py`**, **`ingest_docs.py`**, **`build_embeddings.py`**, **`migrate_database.py`**, **`add_documents_from_folder.py`**, **`diagnose_and_fix_transactions.py`**, **`download_huggingface_dataset.py`**, etc. Use them manually for migrations, backfills, and embedding rebuilds.
+Not invoked by default: **`seed_db.py`**, **`ingest_docs.py`**, **`build_embeddings.py`**, **`migrate_database.py`**, **`add_documents_from_folder.py`**, **`diagnose_and_fix_transactions.py`**, **`download_huggingface_dataset.py`**, **`preload_kaggle_invoices.py`**, etc. Use them manually for migrations, backfills, demo data, and embedding rebuilds.
 
 ### Docker
 
@@ -392,7 +402,7 @@ Compose files wire Postgres + env; see repository root YAMLs.
 
 - **Frontend:** deploy subdirectory **`web/`** (e.g. Vercel). Set **`NEXT_PUBLIC_API_URL`** to your API’s public origin. Set **`NEXT_PUBLIC_SITE_URL`** or rely on **`VERCEL_URL`** for metadata (see layout).
 - **Backend:** container host (Fly, Railway, Cloud Run, etc.) using **`api/Dockerfile`** with **root build context**. Inject **`GOOGLE_API_KEY`**, DB URL, **`CORS_ORIGINS`** matching the **exact** browser origin(s) in production.
-- **Persistence:** mount a volume (or object storage strategy) for **`data/raw_docs`**, **`data/embeddings`**, and SQLite file if used—ephemeral disks lose indexes and uploads on restart.
+- **Persistence:** mount a volume (or object storage strategy) for **`api/data/raw_docs`**, **`api/data/embeddings`**, and the SQLite file if used—ephemeral disks lose indexes and uploads on restart.
 
 ---
 
@@ -403,6 +413,7 @@ Compose files wire Postgres + env; see repository root YAMLs.
 | **FAISS** | **`IndexFlatL2`** is linear; slow at very large N | IVF / HNSW, or managed vector DB (Pinecone, pgvector, …). |
 | **Index updates** | **`add_documents`** rebuilds whole index | Incremental add, background jobs, versioning. |
 | **Schema** | **`create_all`** only; no Alembic in tree | Migrations for production schema evolution. |
+| **Chat** | **`history`** trimmed to **20** turns with content ([`chat.py`](api/app/routers/chat.py)) | Configurable cap, thread storage, or rolling summary. |
 | **OCR** | Host must have Tesseract unless using Docker image | Cloud OCR APIs, better layout models. |
 | **Compare routes** | Mounted at `/documents/...` alongside document CRUD | Ensure route ordering in OpenAPI matches FastAPI resolution for edge IDs. |
 | **Secrets** | **Never commit** real `GOOGLE_API_KEY`; rotate if leaked | Secret manager, `.env` gitignored (already). |
