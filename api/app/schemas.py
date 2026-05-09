@@ -3,7 +3,7 @@ Pydantic schemas for API input/output validation.
 """
 from pydantic import BaseModel
 from datetime import datetime
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 
 class DocumentCreate(BaseModel):
     filename: str
@@ -44,10 +44,17 @@ class TransactionResponse(BaseModel):
     class Config:
         from_attributes = True
 
+class ChatMessage(BaseModel):
+    """One turn for multi-turn chat (OpenAI-style role + content)."""
+    role: str
+    content: str
+
+
 class QueryRequest(BaseModel):
     query: str
     use_rag: bool = True
     use_sql: bool = True
+    history: Optional[List[ChatMessage]] = None
 
 class QueryResponse(BaseModel):
     answer: str

@@ -27,3 +27,5 @@ class AgentState(TypedDict, total=False):
 
     answer: str
     sources: List[Any]
+
+    history: List[Dict[str, str]]

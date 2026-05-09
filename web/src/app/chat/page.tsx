@@ -15,17 +15,24 @@ type ChatResp = {
   tool_calls?: unknown[];
 };
 
+type ChatTurn = { role: "user" | "assistant"; text: string };
+
+const MAX_HISTORY = 20;
+
 export default function ChatPage() {
   const [q, setQ] = useState("");
-  const [msgs, setMsgs] = useState<{ role: "user" | "assistant"; text: string }[]>(
-    []
-  );
+  const [msgs, setMsgs] = useState<ChatTurn[]>([]);
   const mut = useMutation({
-    mutationFn: (query: string) =>
+    mutationFn: (payload: {
+      query: string;
+      history: { role: string; content: string }[];
+    }) =>
       apiPostJson<ChatResp>("/chat/insights", {
-        query,
+        query: payload.query,
         use_rag: true,
         use_sql: true,
+        history:
+          payload.history.length > 0 ? payload.history : undefined,
       }),
     onSuccess: (data) =>
       setMsgs((m) => [...m, { role: "assistant", text: data.answer }]),
@@ -91,9 +98,12 @@ export default function ChatPage() {
           e.preventDefault();
           const query = q.trim();
           if (!query) return;
+          const history = msgs
+            .slice(-MAX_HISTORY)
+            .map((m) => ({ role: m.role, content: m.text }));
           setMsgs((m) => [...m, { role: "user", text: query }]);
           setQ("");
-          mut.mutate(query);
+          mut.mutate({ query, history });
         }}
       >
         <input

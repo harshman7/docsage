@@ -99,21 +99,46 @@ def node_metrics_fast(state: AgentState) -> Dict[str, Any]:
         }
 
 
-def _generate_sql(query: str) -> str | None:
+def _conversation_block(state: AgentState) -> str:
+    hist = state.get("history") or []
+    if not hist:
+        return ""
+    lines: List[str] = []
+    for m in hist[-10:]:
+        if not isinstance(m, dict):
+            continue
+        role = str(m.get("role", "user"))
+        content = str(m.get("content", "")).strip()
+        if content:
+            lines.append(f"{role}: {content}")
+    if not lines:
+        return ""
+    return "Conversation so far:\n" + "\n".join(lines) + "\n\n"
+
+
+def _generate_sql(state: AgentState) -> str | None:
+    q = state["query"]
+    conv = _conversation_block(state)
     try:
-        schema = SQLTools.get_table_schema("transactions")
-        sample = SQLTools.get_sample_data("transactions", limit=3)
-        schema_str = json.dumps(schema, indent=2)
-        sample_str = json.dumps(sample, indent=2, default=str)
-        prompt = f"""Given this schema and sample rows, output ONE SQL SELECT only for:
-{query}
+        ctx = SQLTools.get_multitable_sql_llm_context(sample_rows=3)
+        prompt = f"""Given schemas and samples for tables `documents` and `transactions`, output ONE SQL SELECT only for:
+{q}
 
-Schema:
-{schema_str}
-Sample:
-{sample_str}
+{conv}Relationship: `transactions.document_id` references `documents.id` (JOIN allowed).
 
-Rules: SELECT only; use real column names; no markdown."""
+documents columns (schema):
+{json.dumps(ctx["documents_schema"], indent=2)}
+
+transactions columns (schema):
+{json.dumps(ctx["transactions_schema"], indent=2)}
+
+documents sample rows (raw_text truncated; extracted_data may be JSON):
+{json.dumps(ctx["documents_sample"], indent=2, default=str)}
+
+transactions sample rows:
+{json.dumps(ctx["transactions_sample"], indent=2, default=str)}
+
+Rules: SELECT only; JOIN documents and transactions when the question needs both; use exact column names from the schemas; SQLite and PostgreSQL compatible SQL preferred (avoid dialect-only functions unless necessary); no markdown fences."""
         raw = call_llm(prompt, timeout=25).strip()
         raw = re.sub(r"```sql\s*", "", raw)
         raw = re.sub(r"```\s*", "", raw).strip()
@@ -124,7 +149,7 @@ Rules: SELECT only; use real column names; no markdown."""
 
 def node_sql_only(state: AgentState) -> Dict[str, Any]:
     q = state["query"]
-    sql = _generate_sql(q)
+    sql = _generate_sql(state)
     if not sql:
         return {
             "answer": "Could not generate a valid SQL query for this question.",
@@ -135,7 +160,7 @@ def node_sql_only(state: AgentState) -> Dict[str, Any]:
         rows = SQLTools.execute_query(sql)
         snippet = json.dumps(rows[:20], default=str)
         summary = call_llm(
-            f"User question: {q}\nSQL result JSON:\n{snippet}\nSummarize clearly for the user.",
+            f"{_conversation_block(state)}User question: {q}\nSQL result JSON:\n{snippet}\nSummarize clearly for the user.",
             timeout=30,
         )
         return {
@@ -156,12 +181,13 @@ def node_sql_only(state: AgentState) -> Dict[str, Any]:
 def node_hyde_rewrite(state: AgentState) -> Dict[str, Any]:
     q = state["query"]
     prev = state.get("refinement_hint", "")
+    conv = _conversation_block(state)
     hyde = call_llm(
-        f"Write a short hypothetical passage (2-4 sentences) that would answer this:\n{q}",
+        f"{conv}Write a short hypothetical passage (2-4 sentences) that would answer this:\n{q}",
         timeout=25,
     )
     rewritten = call_llm(
-        f"{('Refine search because: ' + prev + chr(10)) if prev else ''}"
+        f"{conv}{('Refine search because: ' + prev + chr(10)) if prev else ''}"
         f"Rewrite this user question into a standalone search query for a vector DB (one line):\n{q}",
         timeout=20,
     )
@@ -235,8 +261,26 @@ def node_rerank(state: AgentState) -> Dict[str, Any]:
         pairs[i]["rerank_score"] = float(s)
     pairs_sorted = sorted(pairs, key=lambda x: -x["rerank_score"])[:RERANK_KEEP]
 
-    norm = [{"document": x["document"], "score": x["rerank_score"], "snippet": x.get("snippet", "")[:800]} for x in pairs_sorted]
-    sources = [{"document": norm[i]["document"], "score": norm[i]["score"]} for i in range(len(norm))]
+    norm = [
+        {
+            "document": x["document"],
+            "score": x["rerank_score"],
+            "snippet": x.get("snippet", "")[:800],
+        }
+        for x in pairs_sorted
+    ]
+    sources = []
+    for item in norm:
+        d = item.get("document") or {}
+        sources.append(
+            {
+                "document_id": d.get("id"),
+                "filename": d.get("filename"),
+                "chunk_index": d.get("chunk_index"),
+                "chunk_type": d.get("chunk_type"),
+                "score": item.get("score"),
+            }
+        )
 
     return {"reranked": norm, "sources": sources,
             "steps": [{"step": "rerank", "detail": f"top_{len(norm)}"}]
@@ -249,7 +293,7 @@ def node_grade(state: AgentState) -> Dict[str, Any]:
     )
     judge = call_llm(
         (
-            f"User question: {state['query']}\n\nPassages:\n{chunks}\n\n"
+            f"{_conversation_block(state)}User question: {state['query']}\n\nPassages:\n{chunks}\n\n"
             'Reply JSON only: {"sufficient": true|false, "hint": "..."}'
         ),
         timeout=20,
@@ -280,7 +324,17 @@ def node_optional_sql(state: AgentState) -> Dict[str, Any]:
     q = state["query"]
     if not any(
         k in q.lower()
-        for k in ["total", "sum", "count", "average", "transaction", "spend"]
+        for k in [
+            "total",
+            "sum",
+            "count",
+            "average",
+            "transaction",
+            "spend",
+            "document",
+            "invoice",
+            "file",
+        ]
     ):
         return {
             "sql_query": None,
@@ -288,7 +342,7 @@ def node_optional_sql(state: AgentState) -> Dict[str, Any]:
             "steps": [{"step": "sql_hybrid", "detail": "skipped_keywords"}],
         }
 
-    sql = _generate_sql(q)
+    sql = _generate_sql(state)
     if not sql:
         return {"sql_query": None, "sql_answer": None}
 
@@ -314,29 +368,52 @@ def node_synthesize(state: AgentState) -> Dict[str, Any]:
         ctx_parts.append((r.get("snippet") or ""))
     rag_block = "\n---\n".join(ctx_parts) if ctx_parts else "(no retrieval)"
     sql_ans = state.get("sql_answer")
+
+    conv = _conversation_block(state)
+    sql_useful = bool(
+        sql_ans
+        and str(sql_ans).strip()
+        and not str(sql_ans).strip().lower().startswith("(sql error")
+    )
+
     syn = []
     syn.append(
         call_llm(
-            f"""You are DocSage. Answer using retrieval context and optional SQL excerpt.
+            f"""You are DocSage. Answer using retrieval context and optional SQL facts below.
 
-Question: {state['query']}
+{conv}Question: {state['query']}
 
-Retrieval excerpts:
+Retrieval excerpts (may be empty):
 {rag_block}
 
 SQL JSON facts (may be empty):
-{sql_ans or "none"}
+{sql_ans if sql_useful else "none"}
 
-Cite filenames from context when mentioning documents. Markdown answer.""",
+Rules:
+- If there are no retrieval excerpts and no usable SQL facts, say clearly that you did not find relevant data in the document index or database — do not invent amounts, vendors, or filenames.
+- When using passages, cite with **filename** and **document_id** when inferable from the excerpts (e.g. `invoice.pdf` (document_id 12)).
+- Prefer SQL facts for numeric aggregates when both overlap with retrieval.
+- Markdown answer.""",
             timeout=45,
         )
     )
 
     ans = syn[0] if syn else "(no LLM)"
-    sources = [{"document": s["document"], "score": s.get("score")} if isinstance(s, dict) else {"document": s} for s in state.get("sources", [])][:10]
+    enriched_sources = []
+    for r in state.get("reranked", [])[:10]:
+        d = r.get("document") or {}
+        enriched_sources.append(
+            {
+                "document_id": d.get("id"),
+                "filename": d.get("filename"),
+                "chunk_index": d.get("chunk_index"),
+                "chunk_type": d.get("chunk_type"),
+                "score": r.get("score"),
+            }
+        )
 
     return {
         "answer": ans.strip(),
-        "sources": sources if state.get("use_rag") else [],
+        "sources": enriched_sources if state.get("use_rag") else [],
         "steps": [{"step": "synthesize", "detail": "final"}],
     }

@@ -1,6 +1,7 @@
 """
 Safe SQL query helpers for the agent.
 """
+import json
 from typing import List, Dict, Any, Optional
 from sqlalchemy import text
 from app.db import SessionLocal
@@ -67,4 +68,69 @@ class SQLTools:
     def get_sample_data(table_name: str, limit: int = 5) -> List[Dict[str, Any]]:
         """Get sample data from a table."""
         return SQLTools.execute_query(f"SELECT * FROM {table_name}", limit=limit)
+
+    @staticmethod
+    def get_multitable_sql_llm_context(
+        sample_rows: int = 3,
+        raw_preview_len: int = 200,
+        extracted_json_max: int = 500,
+    ) -> Dict[str, Any]:
+        """
+        Schemas plus small samples for documents + transactions (LLM SQL generation).
+        Truncates raw_text and extracted_data in samples to keep prompts small.
+        """
+        from app.config import settings
+
+        txn_schema = SQLTools.get_table_schema("transactions")
+        doc_schema = SQLTools.get_table_schema("documents")
+        txn_sample = SQLTools.execute_query(
+            f"SELECT * FROM transactions LIMIT {sample_rows}", limit=sample_rows
+        )
+
+        if settings.USE_SQLITE:
+            doc_sql = f"""
+                SELECT id, filename, file_path, document_type, created_at,
+                       substr(coalesce(raw_text, ''), 1, {raw_preview_len}) AS raw_text_preview,
+                       extracted_data
+                FROM documents
+                ORDER BY id DESC
+                LIMIT {sample_rows}
+            """
+        else:
+            doc_sql = f"""
+                SELECT id, filename, file_path, document_type, created_at,
+                       LEFT(COALESCE(raw_text, ''), {raw_preview_len}) AS raw_text_preview,
+                       extracted_data
+                FROM documents
+                ORDER BY id DESC
+                LIMIT {sample_rows}
+            """
+
+        doc_sample = SQLTools.execute_query(doc_sql.strip(), limit=sample_rows)
+
+        def _shrink_extracted(row: Dict[str, Any]) -> None:
+            ed = row.get("extracted_data")
+            if ed is None:
+                return
+            try:
+                if isinstance(ed, (dict, list)):
+                    s = json.dumps(ed, default=str, ensure_ascii=False)
+                else:
+                    s = str(ed)
+                if len(s) > extracted_json_max:
+                    row["extracted_data"] = s[: extracted_json_max - 3] + "..."
+                elif isinstance(ed, (dict, list)):
+                    row["extracted_data"] = ed
+            except Exception:
+                row["extracted_data"] = str(ed)[:extracted_json_max]
+
+        for row in doc_sample:
+            _shrink_extracted(row)
+
+        return {
+            "transactions_schema": txn_schema,
+            "documents_schema": doc_schema,
+            "transactions_sample": txn_sample,
+            "documents_sample": doc_sample,
+        }
 

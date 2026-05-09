@@ -1,4 +1,6 @@
 """Chat / agent endpoint helpers and v1 router."""
+from typing import Dict, List
+
 from fastapi import APIRouter, HTTPException
 
 from app.schemas import QueryRequest, QueryResponse
@@ -19,11 +21,19 @@ def get_rag_service() -> RAGService:
 
 def run_chat(request: QueryRequest) -> QueryResponse:
     rag = get_rag_service()
+    hist: List[Dict[str, str]] = []
+    if request.history:
+        hist = [
+            {"role": m.role, "content": m.content}
+            for m in request.history
+            if m.content and m.content.strip()
+        ][-20:]
     result = run_agent_pipeline(
         request.query.strip(),
         rag,
         use_rag=request.use_rag,
         use_sql=request.use_sql,
+        history=hist or None,
     )
 
     return QueryResponse(

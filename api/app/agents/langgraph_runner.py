@@ -1,5 +1,5 @@
 """Public entrypoints for LangGraph agent."""
-from typing import Any, Dict
+from typing import Any, Dict, List, Optional
 
 from app.services.rag import RAGService
 from app.agents.langgraph.graph import build_agent_graph
@@ -21,6 +21,7 @@ def run_agent_pipeline(
     *,
     use_rag: bool = True,
     use_sql: bool = True,
+    history: Optional[List[Dict[str, str]]] = None,
 ) -> Dict[str, Any]:
     graph = get_compiled_graph(rag)
 
@@ -34,6 +35,7 @@ def run_agent_pipeline(
         "search_query": "",
         "refinement_hint": "",
         "answer": "",
+        "history": list(history) if history else [],
     }
 
     out = graph.invoke(seed)
