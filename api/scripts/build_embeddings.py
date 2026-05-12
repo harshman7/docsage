@@ -21,19 +21,23 @@ from app.services.extraction_summary import extraction_to_index_text
 from app.config import settings
 
 
-def build_embeddings(chunk_size: int = 500, chunk_overlap: int = 50):
+def build_embeddings(chunk_size: int = 500, chunk_overlap: int = 50, user_id: int | None = None):
     """Build FAISS index from documents in database."""
     db = SessionLocal()
     try:
-        documents = db.query(Document).all()
+        q = db.query(Document)
+        if user_id is not None:
+            q = q.filter(Document.user_id == user_id)
+        documents = q.all()
 
         if not documents:
             print("No documents found in database. Run ingest_docs.py first.")
             return
 
-        print(f"Building embeddings for {len(documents)} documents...")
+        scope = f"user {user_id}" if user_id else "all users"
+        print(f"Building embeddings for {len(documents)} documents ({scope})...")
 
-        rag_service = RAGService()
+        rag_service = RAGService(user_id=user_id)
 
         texts = []
         doc_metadata = []
@@ -123,7 +127,10 @@ def build_embeddings(chunk_size: int = 500, chunk_overlap: int = 50):
 
 
 if __name__ == "__main__":
-    chunk_size = (
-        int(sys.argv[1]) if len(sys.argv) > 1 and sys.argv[1].isdigit() else 500
-    )
-    build_embeddings(chunk_size=chunk_size)
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Build FAISS embeddings index")
+    parser.add_argument("--chunk-size", type=int, default=500)
+    parser.add_argument("--user-id", type=int, default=None, help="Scope to a single user")
+    args = parser.parse_args()
+    build_embeddings(chunk_size=args.chunk_size, user_id=args.user_id)

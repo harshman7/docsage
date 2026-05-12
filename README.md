@@ -125,7 +125,8 @@ Settings load from environment and optional `api/.env`. Unknown keys are **ignor
 
 | Variable | Purpose |
 |----------|---------|
-| `NEXT_PUBLIC_API_URL` | Origin of the FastAPI server (no trailing slash), e.g. `http://127.0.0.1:8000`. Used by [`web/src/lib/api.ts`](web/src/lib/api.ts). |
+| `NEXT_PUBLIC_API_URL` | Origin of the FastAPI server (no trailing slash), e.g. `http://127.0.0.1:8000`. Used by [`web/src/lib/api.ts`](web/src/lib/api.ts). Must match the host you use in the browser (`localhost` vs `127.0.0.1`) to avoid CORS/preflight issues. |
+| `NEXT_PUBLIC_GOOGLE_OAUTH_ENABLED` | Optional. Set to `true` to show “Continue with Google” before the client fetches [`GET /api/v1/auth/config`](api/app/routers/auth.py); otherwise the UI reads that endpoint and only shows the button when the API has OAuth credentials. |
 | `NEXT_PUBLIC_SITE_URL` | Optional canonical site URL for metadata. If unset on Vercel, **`VERCEL_URL`** is used in [`web/src/app/layout.tsx`](web/src/app/layout.tsx) for `metadataBase`. |
 
 **Docker Compose:** pass `GOOGLE_API_KEY`, `GOOGLE_AI_MODEL`, `GOOGLE_AI_MODEL_FALLBACKS` into the `api` service (see [`docker-compose.yml`](docker-compose.yml), [`docker-compose.prod.yml`](docker-compose.prod.yml)).
@@ -403,6 +404,52 @@ Compose files wire Postgres + env; see repository root YAMLs.
 - **Frontend:** deploy subdirectory **`web/`** (e.g. Vercel). Set **`NEXT_PUBLIC_API_URL`** to your API’s public origin. Set **`NEXT_PUBLIC_SITE_URL`** or rely on **`VERCEL_URL`** for metadata (see layout).
 - **Backend:** container host (Fly, Railway, Cloud Run, etc.) using **`api/Dockerfile`** with **root build context**. Inject **`GOOGLE_API_KEY`**, DB URL, **`CORS_ORIGINS`** matching the **exact** browser origin(s) in production.
 - **Persistence:** mount a volume (or object storage strategy) for **`api/data/raw_docs`**, **`api/data/embeddings`**, and the SQLite file if used—ephemeral disks lose indexes and uploads on restart.
+
+---
+
+## Authentication and multi-tenancy
+
+DocSage uses **JWT-based authentication** with email/password registration and optional **Google OAuth**.
+
+### Backend
+
+- **User model** in [`api/app/models.py`](api/app/models.py): email (unique), hashed password (nullable for OAuth-only), optional `oauth_provider`/`oauth_sub`.
+- **Auth router** at `/api/v1/auth/` ([`api/app/routers/auth.py`](api/app/routers/auth.py)):
+  - `POST /register` — email + password; returns JWT.
+  - `POST /login` — email + password; returns JWT.
+  - `GET /me` — current user from token.
+  - `GET /google` — redirects to Google consent screen.
+  - `GET /google/callback` — exchanges code, upserts user, redirects to frontend with token in URL hash.
+- **Dependency** `get_current_user` in [`api/app/deps.py`](api/app/deps.py) protects all non-auth routes.
+- **Tenant isolation**: every query in documents, transactions, analytics, anomalies, compare, receipts, export, reports, and chat is filtered by `user_id`.
+- **Per-user upload paths**: files are stored under `data/raw_docs/user_{id}/`.
+- **Per-user RAG**: FAISS indexes live at `data/embeddings/user_{id}/`.
+- **Chat sessions API** at `/api/v1/chat/sessions` (CRUD scoped to current user).
+
+### Frontend
+
+- **AuthProvider** in [`web/src/contexts/auth.tsx`](web/src/contexts/auth.tsx): stores JWT in `localStorage`, exposes `login`, `register`, `logout`, `setTokenFromOAuth`.
+- **Bearer token** added to all API requests via [`web/src/lib/api.ts`](web/src/lib/api.ts).
+- **Route protection** in [`ShellLayout`](web/src/components/ShellLayout.tsx): unauthenticated users are redirected to `/login`; public routes: `/`, `/login`, `/register`, `/auth/callback`.
+- **Login/Register pages**: Google sign-in is shown only when the API reports OAuth is enabled (`GET /auth/config`) or `NEXT_PUBLIC_GOOGLE_OAUTH_ENABLED=true`.
+- **Chat sessions** sync to the server API when authenticated; fall back to localStorage when offline.
+
+### Configuration
+
+| Variable | Purpose |
+|----------|---------|
+| `JWT_SECRET` | Secret for HS256 token signing (**change in production**). |
+| `JWT_EXPIRE_MINUTES` | Token validity (default 7 days). |
+| `GOOGLE_OAUTH_CLIENT_ID` | Google Cloud console client ID (optional). |
+| `GOOGLE_OAUTH_CLIENT_SECRET` | Matching secret. |
+| `GOOGLE_OAUTH_REDIRECT_URI` | Must match console; default `http://localhost:8000/api/v1/auth/google/callback`. |
+| `FRONTEND_URL` | Where the OAuth callback redirects with the token hash fragment. |
+
+Public **`GET /api/v1/auth/config`** (no auth): returns `{ "google_oauth_enabled": boolean }` so the web UI can hide “Continue with Google” when OAuth is not configured on the server.
+
+### Migration
+
+Run `python scripts/migrate_database.py` from `api/` to add `user_id` columns to existing tables and create `users` / `chat_sessions` tables. Existing rows without a `user_id` are hidden from authenticated queries until backfilled.
 
 ---
 

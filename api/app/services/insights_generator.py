@@ -9,20 +9,23 @@ from sqlalchemy import func
 from app.db import SessionLocal
 from app.models import Transaction
 
-def generate_insights_report() -> str:
+def generate_insights_report(user_id: int | None = None) -> str:
     """Generate a natural language insights report."""
-    
-    # Gather data
-    vendor_stats = InsightsService.get_vendor_stats(limit=5)
-    category_breakdown = InsightsService.get_category_breakdown()
-    anomalies = AnomalyDetector.get_all_anomalies()
-    forecast = InsightsService.get_spending_forecast()
-    
-    # Get transaction summary
+
+    vendor_stats = InsightsService.get_vendor_stats(limit=5, user_id=user_id)
+    category_breakdown = InsightsService.get_category_breakdown(user_id=user_id)
+    anomalies = AnomalyDetector.get_all_anomalies(user_id=user_id)
+    forecast = InsightsService.get_spending_forecast(user_id=user_id)
+
     db = SessionLocal()
     try:
-        total_txns = db.query(Transaction).count()
-        total_spend = db.query(func.sum(Transaction.amount)).scalar() or 0
+        q = db.query(Transaction)
+        sq = db.query(func.sum(Transaction.amount))
+        if user_id is not None:
+            q = q.filter(Transaction.user_id == user_id)
+            sq = sq.filter(Transaction.user_id == user_id)
+        total_txns = q.count()
+        total_spend = sq.scalar() or 0
     finally:
         db.close()
     

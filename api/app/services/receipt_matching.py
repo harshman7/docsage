@@ -102,19 +102,16 @@ class ReceiptMatcher:
             db.close()
     
     @staticmethod
-    def match_receipt_to_invoice(receipt_doc_id: int) -> Optional[Dict[str, Any]]:
+    def match_receipt_to_invoice(receipt_doc_id: int, user_id: int | None = None) -> Optional[Dict[str, Any]]:
         """
         Match a receipt document to an invoice.
-        
-        Args:
-            receipt_doc_id: ID of the receipt document
-            
-        Returns:
-            Best matching invoice or None
         """
         db = SessionLocal()
         try:
-            receipt = db.query(Document).filter(Document.id == receipt_doc_id).first()
+            q = db.query(Document).filter(Document.id == receipt_doc_id)
+            if user_id is not None:
+                q = q.filter(Document.user_id == user_id)
+            receipt = q.first()
             if not receipt or receipt.document_type != "receipt":
                 return None
             
@@ -144,13 +141,14 @@ class ReceiptMatcher:
             db.close()
     
     @staticmethod
-    def get_unmatched_receipts() -> List[Dict[str, Any]]:
+    def get_unmatched_receipts(user_id: int | None = None) -> List[Dict[str, Any]]:
         """Get all receipts that haven't been matched to invoices."""
         db = SessionLocal()
         try:
-            receipts = db.query(Document).filter(
-                Document.document_type == "receipt"
-            ).all()
+            q = db.query(Document).filter(Document.document_type == "receipt")
+            if user_id is not None:
+                q = q.filter(Document.user_id == user_id)
+            receipts = q.all()
             
             unmatched = []
             for receipt in receipts:

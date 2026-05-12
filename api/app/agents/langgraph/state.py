@@ -29,3 +29,4 @@ class AgentState(TypedDict, total=False):
     sources: List[Any]
 
     history: List[Dict[str, str]]
+    user_id: Optional[int]

@@ -10,11 +10,14 @@ class DocumentComparator:
     """Compare documents and find similarities."""
     
     @staticmethod
-    def find_similar_documents(document_id: int, limit: int = 5) -> List[Dict[str, Any]]:
+    def find_similar_documents(document_id: int, limit: int = 5, user_id: int | None = None) -> List[Dict[str, Any]]:
         """Find documents similar to the given one."""
         db = SessionLocal()
         try:
-            doc = db.query(Document).filter(Document.id == document_id).first()
+            q = db.query(Document).filter(Document.id == document_id)
+            if user_id is not None:
+                q = q.filter(Document.user_id == user_id)
+            doc = q.first()
             if not doc:
                 return []
             
@@ -25,11 +28,13 @@ class DocumentComparator:
             if not vendor:
                 return []
             
-            # Find documents with same vendor
-            similar = db.query(Document).filter(
+            sq = db.query(Document).filter(
                 Document.id != document_id,
                 Document.document_type == doc.document_type
-            ).all()
+            )
+            if user_id is not None:
+                sq = sq.filter(Document.user_id == user_id)
+            similar = sq.all()
             
             results = []
             for sim_doc in similar:
@@ -69,12 +74,17 @@ class DocumentComparator:
             db.close()
     
     @staticmethod
-    def compare_documents(doc1_id: int, doc2_id: int) -> Dict[str, Any]:
+    def compare_documents(doc1_id: int, doc2_id: int, user_id: int | None = None) -> Dict[str, Any]:
         """Compare two documents side-by-side."""
         db = SessionLocal()
         try:
-            doc1 = db.query(Document).filter(Document.id == doc1_id).first()
-            doc2 = db.query(Document).filter(Document.id == doc2_id).first()
+            q1 = db.query(Document).filter(Document.id == doc1_id)
+            q2 = db.query(Document).filter(Document.id == doc2_id)
+            if user_id is not None:
+                q1 = q1.filter(Document.user_id == user_id)
+                q2 = q2.filter(Document.user_id == user_id)
+            doc1 = q1.first()
+            doc2 = q2.first()
             
             if not doc1 or not doc2:
                 return {"error": "One or both documents not found"}

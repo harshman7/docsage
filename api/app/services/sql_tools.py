@@ -74,17 +74,27 @@ class SQLTools:
         sample_rows: int = 3,
         raw_preview_len: int = 200,
         extracted_json_max: int = 500,
+        user_id: Optional[int] = None,
     ) -> Dict[str, Any]:
         """
         Schemas plus small samples for documents + transactions (LLM SQL generation).
         Truncates raw_text and extracted_data in samples to keep prompts small.
+
+        IMPORTANT: When user_id is set, samples are filtered to that user.
+        The LLM prompt must still instruct the model to include
+        WHERE documents.user_id = {user_id} in generated SQL.
         """
         from app.config import settings
 
         txn_schema = SQLTools.get_table_schema("transactions")
         doc_schema = SQLTools.get_table_schema("documents")
+
+        user_filter_txn = f" WHERE user_id = {user_id}" if user_id else ""
+        user_filter_doc = f" WHERE user_id = {user_id}" if user_id else ""
+
         txn_sample = SQLTools.execute_query(
-            f"SELECT * FROM transactions LIMIT {sample_rows}", limit=sample_rows
+            f"SELECT * FROM transactions{user_filter_txn} LIMIT {sample_rows}",
+            limit=sample_rows,
         )
 
         if settings.USE_SQLITE:
@@ -92,7 +102,7 @@ class SQLTools:
                 SELECT id, filename, file_path, document_type, created_at,
                        substr(coalesce(raw_text, ''), 1, {raw_preview_len}) AS raw_text_preview,
                        extracted_data
-                FROM documents
+                FROM documents{user_filter_doc}
                 ORDER BY id DESC
                 LIMIT {sample_rows}
             """
@@ -101,7 +111,7 @@ class SQLTools:
                 SELECT id, filename, file_path, document_type, created_at,
                        LEFT(COALESCE(raw_text, ''), {raw_preview_len}) AS raw_text_preview,
                        extracted_data
-                FROM documents
+                FROM documents{user_filter_doc}
                 ORDER BY id DESC
                 LIMIT {sample_rows}
             """
@@ -132,5 +142,6 @@ class SQLTools:
             "documents_schema": doc_schema,
             "transactions_sample": txn_sample,
             "documents_sample": doc_sample,
+            "user_id": user_id,
         }
 

@@ -119,13 +119,22 @@ def _conversation_block(state: AgentState) -> str:
 def _generate_sql(state: AgentState) -> str | None:
     q = state["query"]
     conv = _conversation_block(state)
+    uid = state.get("user_id")
     try:
-        ctx = SQLTools.get_multitable_sql_llm_context(sample_rows=3)
+        ctx = SQLTools.get_multitable_sql_llm_context(sample_rows=3, user_id=uid)
+        tenant_rule = ""
+        if uid is not None:
+            tenant_rule = (
+                f"\n\nCRITICAL tenant isolation: `documents.user_id` and `transactions.user_id` must equal {uid}. "
+                f"Every SELECT MUST restrict rows to this user, e.g. `WHERE documents.user_id = {uid}` "
+                f"(join `transactions` on `document_id`) or `WHERE transactions.user_id = {uid}`. "
+                f"Use the numeric literal {uid} in SQL.\n"
+            )
         prompt = f"""Given schemas and samples for tables `documents` and `transactions`, output ONE SQL SELECT only for:
 {q}
 
 {conv}Relationship: `transactions.document_id` references `documents.id` (JOIN allowed).
-
+{tenant_rule}
 documents columns (schema):
 {json.dumps(ctx["documents_schema"], indent=2)}
 

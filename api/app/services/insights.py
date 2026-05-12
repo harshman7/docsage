@@ -17,7 +17,13 @@ class InsightsService:
     """Service for computing insights from transaction data."""
     
     @staticmethod
-    def get_monthly_spend(year: int, month: int) -> Dict[str, Any]:
+    def _user_filter(q, user_id: Optional[int]):
+        if user_id is not None:
+            return q.filter(Transaction.user_id == user_id)
+        return q
+
+    @staticmethod
+    def get_monthly_spend(year: int, month: int, user_id: Optional[int] = None) -> Dict[str, Any]:
         """Calculate total spend for a specific month."""
         with SessionLocal() as db:
             start_date = datetime(year, month, 1)
@@ -25,15 +31,17 @@ class InsightsService:
                 end_date = datetime(year + 1, 1, 1)
             else:
                 end_date = datetime(year, month + 1, 1)
-            
-            result = db.query(
+
+            q = db.query(
                 func.sum(Transaction.amount).label("total_spend"),
                 func.count(Transaction.id).label("transaction_count")
             ).filter(
                 Transaction.date >= start_date,
                 Transaction.date < end_date
-            ).first()
-            
+            )
+            q = InsightsService._user_filter(q, user_id)
+            result = q.first()
+
             return {
                 "year": year,
                 "month": month,
@@ -42,15 +50,17 @@ class InsightsService:
             }
     
     @staticmethod
-    def get_vendor_stats(limit: int = 10) -> List[Dict[str, Any]]:
+    def get_vendor_stats(limit: int = 10, user_id: Optional[int] = None) -> List[Dict[str, Any]]:
         """Get statistics by vendor."""
         with SessionLocal() as db:
-            results = db.query(
+            q = db.query(
                 Transaction.vendor,
                 func.sum(Transaction.amount).label("total_spend"),
                 func.count(Transaction.id).label("transaction_count"),
                 func.avg(Transaction.amount).label("avg_amount")
-            ).group_by(Transaction.vendor).order_by(
+            )
+            q = InsightsService._user_filter(q, user_id)
+            results = q.group_by(Transaction.vendor).order_by(
                 func.sum(Transaction.amount).desc()
             ).limit(limit).all()
             
@@ -65,14 +75,16 @@ class InsightsService:
             ]
     
     @staticmethod
-    def get_category_breakdown() -> List[Dict[str, Any]]:
+    def get_category_breakdown(user_id: Optional[int] = None) -> List[Dict[str, Any]]:
         """Get spending breakdown by category."""
         with SessionLocal() as db:
-            results = db.query(
+            q = db.query(
                 Transaction.category,
                 func.sum(Transaction.amount).label("total_spend"),
                 func.count(Transaction.id).label("transaction_count")
-            ).group_by(Transaction.category).order_by(
+            )
+            q = InsightsService._user_filter(q, user_id)
+            results = q.group_by(Transaction.category).order_by(
                 func.sum(Transaction.amount).desc()
             ).all()
             
@@ -91,6 +103,7 @@ class InsightsService:
         preset: str,
         start_override: Optional[datetime],
         end_override: Optional[datetime],
+        user_id: Optional[int] = None,
     ) -> Tuple[Optional[datetime], Optional[datetime]]:
         """Return inclusive [start, end] for Transaction.date filtering."""
         now = datetime.now()
@@ -98,15 +111,16 @@ class InsightsService:
         if start_override is not None and end_override is not None:
             return start_override, end_override
 
+        def _min_max():
+            q = db.query(
+                func.min(Transaction.date).label("dmin"),
+                func.max(Transaction.date).label("dmax"),
+            ).filter(Transaction.date.isnot(None))
+            q = InsightsService._user_filter(q, user_id)
+            return q.first()
+
         if preset == "all":
-            row = (
-                db.query(
-                    func.min(Transaction.date).label("dmin"),
-                    func.max(Transaction.date).label("dmax"),
-                )
-                .filter(Transaction.date.isnot(None))
-                .first()
-            )
+            row = _min_max()
             if row is None or row.dmin is None:
                 return None, None
             return row.dmin, row.dmax
@@ -118,14 +132,7 @@ class InsightsService:
         if preset == "last_5_years":
             return now - timedelta(days=365 * 5), now
 
-        row = (
-            db.query(
-                func.min(Transaction.date).label("dmin"),
-                func.max(Transaction.date).label("dmax"),
-            )
-            .filter(Transaction.date.isnot(None))
-            .first()
-        )
+        row = _min_max()
         if row is None or row.dmin is None:
             return None, None
         return row.dmin, row.dmax
@@ -136,6 +143,7 @@ class InsightsService:
         granularity: str = "auto",
         start: Optional[datetime] = None,
         end: Optional[datetime] = None,
+        user_id: Optional[int] = None,
     ) -> Dict[str, Any]:
         """
         Spending time series with presets, optional custom range, and month/year granularity.
@@ -148,15 +156,12 @@ class InsightsService:
         granularity = granularity if granularity in GRANULARITIES else "auto"
 
         with SessionLocal() as db:
-            without_date = (
-                db.query(func.count(Transaction.id))
-                .filter(Transaction.date.is_(None))
-                .scalar()
-                or 0
-            )
+            wd_q = db.query(func.count(Transaction.id)).filter(Transaction.date.is_(None))
+            wd_q = InsightsService._user_filter(wd_q, user_id)
+            without_date = wd_q.scalar() or 0
 
             start_date, end_date = InsightsService._resolve_time_window(
-                db, preset, start, end
+                db, preset, start, end, user_id=user_id
             )
             if start_date is None or end_date is None:
                 return {
@@ -170,14 +175,12 @@ class InsightsService:
                     "vendor_trends": {},
                 }
 
-            transactions = (
-                db.query(Transaction)
-                .filter(
-                    Transaction.date >= start_date,
-                    Transaction.date <= end_date,
-                )
-                .all()
+            txn_q = db.query(Transaction).filter(
+                Transaction.date >= start_date,
+                Transaction.date <= end_date,
             )
+            txn_q = InsightsService._user_filter(txn_q, user_id)
+            transactions = txn_q.all()
 
             span_days = (end_date - start_date).days + 1
             if granularity == "auto":
@@ -252,17 +255,18 @@ class InsightsService:
             }
     
     @staticmethod
-    def get_spending_forecast(months: int = 3) -> Dict[str, Any]:
+    def get_spending_forecast(months: int = 3, user_id: Optional[int] = None) -> Dict[str, Any]:
         """Simple linear regression forecast for future spending."""
         with SessionLocal() as db:
-            # Get last 6 months of data
             end_date = datetime.now()
             start_date = end_date - timedelta(days=180)
-            
-            transactions = db.query(Transaction).filter(
+
+            q = db.query(Transaction).filter(
                 Transaction.date >= start_date,
                 Transaction.date <= end_date
-            ).all()
+            )
+            q = InsightsService._user_filter(q, user_id)
+            transactions = q.all()
             
             if len(transactions) < 2:
                 return {"forecast": [], "trend": "insufficient_data"}

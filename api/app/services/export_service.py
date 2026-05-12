@@ -11,20 +11,18 @@ from app.models import Transaction, Document
 from app.services.insights import InsightsService
 from app.services.anomaly_detection import AnomalyDetector
 
-def export_to_excel(output_path: Optional[str] = None) -> BytesIO:
+def export_to_excel(output_path: Optional[str] = None, user_id: Optional[int] = None) -> BytesIO:
     """
     Export all data to Excel with multiple sheets.
-    
-    Returns:
-        BytesIO object with Excel file
     """
     db = SessionLocal()
     try:
-        # Create Excel writer
         output = BytesIO()
         with pd.ExcelWriter(output, engine='openpyxl') as writer:
-            # Sheet 1: All Transactions
-            transactions = db.query(Transaction).all()
+            q = db.query(Transaction)
+            if user_id is not None:
+                q = q.filter(Transaction.user_id == user_id)
+            transactions = q.all()
             txn_data = [{
                 "ID": t.id,
                 "Date": t.date,
@@ -40,19 +38,19 @@ def export_to_excel(output_path: Optional[str] = None) -> BytesIO:
                 df_txns.to_excel(writer, sheet_name="Transactions", index=False)
             
             # Sheet 2: Vendor Statistics
-            vendor_stats = InsightsService.get_vendor_stats(limit=50)
+            vendor_stats = InsightsService.get_vendor_stats(limit=50, user_id=user_id)
             if vendor_stats:
                 df_vendors = pd.DataFrame(vendor_stats)
                 df_vendors.to_excel(writer, sheet_name="Vendor Stats", index=False)
-            
+
             # Sheet 3: Category Breakdown
-            category_breakdown = InsightsService.get_category_breakdown()
+            category_breakdown = InsightsService.get_category_breakdown(user_id=user_id)
             if category_breakdown:
                 df_categories = pd.DataFrame(category_breakdown)
                 df_categories.to_excel(writer, sheet_name="Category Breakdown", index=False)
-            
+
             # Sheet 4: Anomalies
-            anomalies = AnomalyDetector.get_all_anomalies()
+            anomalies = AnomalyDetector.get_all_anomalies(user_id=user_id)
             if anomalies:
                 # Flatten anomaly data
                 anomaly_data = []
@@ -72,7 +70,10 @@ def export_to_excel(output_path: Optional[str] = None) -> BytesIO:
                 df_anomalies.to_excel(writer, sheet_name="Anomalies", index=False)
             
             # Sheet 5: Documents Summary
-            documents = db.query(Document).all()
+            dq = db.query(Document)
+            if user_id is not None:
+                dq = dq.filter(Document.user_id == user_id)
+            documents = dq.all()
             doc_data = [{
                 "ID": d.id,
                 "Filename": d.filename,
@@ -99,21 +100,21 @@ def export_to_excel(output_path: Optional[str] = None) -> BytesIO:
     finally:
         db.close()
 
-def export_summary_report() -> str:
-    """
-    Generate a text summary report.
-    
-    Returns:
-        Markdown formatted report string
-    """
+def export_summary_report(user_id: Optional[int] = None) -> str:
+    """Generate a text summary report."""
     db = SessionLocal()
     try:
-        total_txns = db.query(Transaction).count()
-        total_spend = db.query(func.sum(Transaction.amount)).scalar() or 0
-        
-        vendor_stats = InsightsService.get_vendor_stats(limit=10)
-        category_breakdown = InsightsService.get_category_breakdown()
-        anomalies = AnomalyDetector.get_all_anomalies()
+        q = db.query(Transaction)
+        sq = db.query(func.sum(Transaction.amount))
+        if user_id is not None:
+            q = q.filter(Transaction.user_id == user_id)
+            sq = sq.filter(Transaction.user_id == user_id)
+        total_txns = q.count()
+        total_spend = sq.scalar() or 0
+
+        vendor_stats = InsightsService.get_vendor_stats(limit=10, user_id=user_id)
+        category_breakdown = InsightsService.get_category_breakdown(user_id=user_id)
+        anomalies = AnomalyDetector.get_all_anomalies(user_id=user_id)
         
         report = f"""# Expense Report
 Generated: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}

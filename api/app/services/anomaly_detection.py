@@ -7,6 +7,7 @@ from sqlalchemy import func
 from app.db import SessionLocal
 from app.models import Document, Transaction
 
+
 class AnomalyDetector:
     """Detect anomalies in documents and transactions."""
 
@@ -21,32 +22,33 @@ class AnomalyDetector:
         )
         fp = row[0] if row else None
         return bool(fp and fp.startswith("kaggle://"))
-    
+
     @staticmethod
-    def detect_duplicates() -> List[Dict[str, Any]]:
-        """Detect duplicate invoices/transactions."""
+    def detect_duplicates(user_id: Optional[int] = None) -> List[Dict[str, Any]]:
         anomalies = []
         db = SessionLocal()
         try:
-            # Find transactions with same vendor, amount, and date
-            duplicates = db.query(
+            q = db.query(
                 Transaction.vendor,
                 Transaction.amount,
                 Transaction.date,
                 func.count(Transaction.id).label("count")
-            ).group_by(
-                Transaction.vendor,
-                Transaction.amount,
-                Transaction.date
+            )
+            if user_id is not None:
+                q = q.filter(Transaction.user_id == user_id)
+            duplicates = q.group_by(
+                Transaction.vendor, Transaction.amount, Transaction.date
             ).having(func.count(Transaction.id) > 1).all()
-            
+
             for dup in duplicates:
-                transactions = db.query(Transaction).filter(
+                tq = db.query(Transaction).filter(
                     Transaction.vendor == dup.vendor,
                     Transaction.amount == dup.amount,
                     Transaction.date == dup.date
-                ).all()
-                
+                )
+                if user_id is not None:
+                    tq = tq.filter(Transaction.user_id == user_id)
+                transactions = tq.all()
                 anomalies.append({
                     "type": "duplicate",
                     "severity": "high",
@@ -57,34 +59,33 @@ class AnomalyDetector:
                 })
         finally:
             db.close()
-        
         return anomalies
-    
+
     @staticmethod
-    def detect_unusual_amounts() -> List[Dict[str, Any]]:
-        """Detect transactions with unusually high amounts."""
+    def detect_unusual_amounts(user_id: Optional[int] = None) -> List[Dict[str, Any]]:
         anomalies = []
         db = SessionLocal()
         try:
-            # Calculate vendor averages
-            vendor_stats = db.query(
+            q = db.query(
                 Transaction.vendor,
                 func.avg(Transaction.amount).label("avg_amount"),
                 func.stddev(Transaction.amount).label("stddev_amount")
-            ).group_by(Transaction.vendor).all()
-            
+            )
+            if user_id is not None:
+                q = q.filter(Transaction.user_id == user_id)
+            vendor_stats = q.group_by(Transaction.vendor).all()
+
             for vendor, avg_amt, stddev_amt in vendor_stats:
                 if stddev_amt is None:
                     continue
-                
-                # Find transactions > 2 standard deviations above mean
                 threshold = avg_amt + (2 * stddev_amt)
-                unusual = db.query(Transaction).filter(
+                uq = db.query(Transaction).filter(
                     Transaction.vendor == vendor,
                     Transaction.amount > threshold
-                ).all()
-                
-                for txn in unusual:
+                )
+                if user_id is not None:
+                    uq = uq.filter(Transaction.user_id == user_id)
+                for txn in uq.all():
                     anomalies.append({
                         "type": "unusual_amount",
                         "severity": "medium",
@@ -96,23 +97,21 @@ class AnomalyDetector:
                     })
         finally:
             db.close()
-        
         return anomalies
-    
+
     @staticmethod
-    def detect_missing_fields() -> List[Dict[str, Any]]:
-        """Detect documents with missing critical fields."""
+    def detect_missing_fields(user_id: Optional[int] = None) -> List[Dict[str, Any]]:
         anomalies = []
         db = SessionLocal()
         try:
-            documents = db.query(Document).filter(
-                Document.document_type == "invoice"
-            ).all()
-            
+            q = db.query(Document).filter(Document.document_type == "invoice")
+            if user_id is not None:
+                q = q.filter(Document.user_id == user_id)
+            documents = q.all()
+
             for doc in documents:
                 extracted = doc.extracted_data or {}
                 issues = []
-                
                 if not extracted.get("vendor"):
                     issues.append("Missing vendor")
                 if not extracted.get("total") or extracted.get("total") == 0:
@@ -121,7 +120,6 @@ class AnomalyDetector:
                     issues.append("Missing invoice number")
                 if not extracted.get("dates"):
                     issues.append("Missing date")
-                
                 if issues:
                     anomalies.append({
                         "type": "missing_fields",
@@ -133,28 +131,24 @@ class AnomalyDetector:
                     })
         finally:
             db.close()
-        
         return anomalies
-    
+
     @staticmethod
-    def detect_date_anomalies() -> List[Dict[str, Any]]:
-        """Detect future dates or very old invoices."""
+    def detect_date_anomalies(user_id: Optional[int] = None) -> List[Dict[str, Any]]:
         anomalies = []
         db = SessionLocal()
         try:
             now = datetime.now()
             future_threshold = now + timedelta(days=1)
-            old_threshold = now - timedelta(days=365 * 5)  # 5 years old
-            
-            future_txns = db.query(Transaction).filter(
-                Transaction.date > future_threshold
-            ).all()
-            
-            old_txns = db.query(Transaction).filter(
-                Transaction.date < old_threshold
-            ).all()
-            
-            for txn in future_txns:
+            old_threshold = now - timedelta(days=365 * 5)
+
+            fq = db.query(Transaction).filter(Transaction.date > future_threshold)
+            oq = db.query(Transaction).filter(Transaction.date < old_threshold)
+            if user_id is not None:
+                fq = fq.filter(Transaction.user_id == user_id)
+                oq = oq.filter(Transaction.user_id == user_id)
+
+            for txn in fq.all():
                 if AnomalyDetector._is_kaggle_synthetic(db, txn.document_id):
                     continue
                 anomalies.append({
@@ -165,8 +159,8 @@ class AnomalyDetector:
                     "document_id": txn.document_id,
                     "date": txn.date
                 })
-            
-            for txn in old_txns:
+
+            for txn in oq.all():
                 if AnomalyDetector._is_kaggle_synthetic(db, txn.document_id):
                     continue
                 anomalies.append({
@@ -179,21 +173,16 @@ class AnomalyDetector:
                 })
         finally:
             db.close()
-        
         return anomalies
-    
+
     @staticmethod
-    def get_all_anomalies() -> List[Dict[str, Any]]:
-        """Get all detected anomalies."""
+    def get_all_anomalies(user_id: Optional[int] = None) -> List[Dict[str, Any]]:
         all_anomalies = []
-        all_anomalies.extend(AnomalyDetector.detect_duplicates())
-        all_anomalies.extend(AnomalyDetector.detect_unusual_amounts())
-        all_anomalies.extend(AnomalyDetector.detect_missing_fields())
-        all_anomalies.extend(AnomalyDetector.detect_date_anomalies())
-        
-        # Sort by severity
+        all_anomalies.extend(AnomalyDetector.detect_duplicates(user_id=user_id))
+        all_anomalies.extend(AnomalyDetector.detect_unusual_amounts(user_id=user_id))
+        all_anomalies.extend(AnomalyDetector.detect_missing_fields(user_id=user_id))
+        all_anomalies.extend(AnomalyDetector.detect_date_anomalies(user_id=user_id))
         severity_order = {"high": 0, "medium": 1, "low": 2}
         all_anomalies.sort(key=lambda x: severity_order.get(x.get("severity", "low"), 2))
-        
         return all_anomalies
 

@@ -2,26 +2,28 @@
 from datetime import date, datetime
 from typing import Optional
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy import func
 from app.services.insights import InsightsService
 from app.db import SessionLocal
-from app.models import Transaction, Document
+from app.deps import get_current_user
+from app.models import Transaction, Document, User
 from app.schemas import DashboardSummary
 
 router = APIRouter(prefix="/analytics", tags=["analytics"])
 
 
 @router.get("/summary", response_model=DashboardSummary)
-def summary():
+def summary(current_user: User = Depends(get_current_user)):
     db = SessionLocal()
     try:
-        total_txns = db.query(Transaction).count()
-        total_spend = db.query(func.sum(Transaction.amount)).scalar() or 0.0
+        base = db.query(Transaction).filter(Transaction.user_id == current_user.id)
+        total_txns = base.count()
+        total_spend = db.query(func.sum(Transaction.amount)).filter(Transaction.user_id == current_user.id).scalar() or 0.0
         avg_transaction = (
             float(total_spend) / total_txns if total_txns > 0 else 0.0
         )
-        doc_count = db.query(Document).count()
+        doc_count = db.query(Document).filter(Document.user_id == current_user.id).count()
         return DashboardSummary(
             total_transactions=total_txns,
             total_spend=float(total_spend),
@@ -48,6 +50,7 @@ def time_series(
     end: Optional[date] = Query(
         None, description="Inclusive range end (override preset when both start and end set)"
     ),
+    current_user: User = Depends(get_current_user),
 ):
     start_dt: Optional[datetime] = None
     end_dt: Optional[datetime] = None
@@ -59,24 +62,25 @@ def time_series(
         granularity=granularity,
         start=start_dt,
         end=end_dt,
+        user_id=current_user.id,
     )
 
 
 @router.get("/vendor-stats")
-def vendor_stats(limit: int = 10):
-    return InsightsService.get_vendor_stats(limit=limit)
+def vendor_stats(limit: int = 10, current_user: User = Depends(get_current_user)):
+    return InsightsService.get_vendor_stats(limit=limit, user_id=current_user.id)
 
 
 @router.get("/category-breakdown")
-def category_breakdown():
-    return InsightsService.get_category_breakdown()
+def category_breakdown(current_user: User = Depends(get_current_user)):
+    return InsightsService.get_category_breakdown(user_id=current_user.id)
 
 
 @router.get("/spending-forecast")
-def forecast(months: int = 3):
-    return InsightsService.get_spending_forecast(months=months)
+def forecast(months: int = 3, current_user: User = Depends(get_current_user)):
+    return InsightsService.get_spending_forecast(months=months, user_id=current_user.id)
 
 
 @router.get("/monthly-spend")
-def monthly_spend(year: int, month: int):
-    return InsightsService.get_monthly_spend(year, month)
+def monthly_spend(year: int, month: int, current_user: User = Depends(get_current_user)):
+    return InsightsService.get_monthly_spend(year, month, user_id=current_user.id)

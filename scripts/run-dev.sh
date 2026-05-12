@@ -15,12 +15,39 @@ if [[ "${1:-}" == "-h" ]] || [[ "${1:-}" == "--help" ]]; then
   echo "  Starts Postgres via Docker (unless --no-docker), then API + web."
   echo "  If Docker is not running, Postgres is skipped; use SQLite (USE_SQLITE=true in api/.env) or start Docker Desktop."
   echo "  Env: API_PORT (default $API_PORT), WEB_PORT (default $WEB_PORT), POSTGRES_PORT (default $POSTGRES_PORT)."
+  echo "  web/.env.local NEXT_PUBLIC_API_URL is updated to http://127.0.0.1:\$API_PORT each run (restart Next after URL changes)."
   echo "  If 5432 is already in use: POSTGRES_PORT=5433 $0 and set POSTGRES_PORT=5433 in api/.env."
   exit 0
 fi
 
 NO_DOCKER=false
 [[ "${1:-}" == "--no-docker" ]] && NO_DOCKER=true
+
+# Sync web/.env.local NEXT_PUBLIC_API_URL with API_PORT (Next reads it when the dev server starts).
+upsert_web_api_url() {
+  python3 - "$ROOT" "$API_PORT" <<'PY'
+import pathlib
+import sys
+
+root = pathlib.Path(sys.argv[1])
+port = sys.argv[2]
+url = f"http://127.0.0.1:{port}"
+path = root / "web" / ".env.local"
+lines = path.read_text().splitlines() if path.exists() else []
+out: list[str] = []
+seen = False
+for line in lines:
+    if line.startswith("NEXT_PUBLIC_API_URL="):
+        if not seen:
+            out.append(f"NEXT_PUBLIC_API_URL={url}")
+            seen = True
+    else:
+        out.append(line)
+if not seen:
+    out.append(f"NEXT_PUBLIC_API_URL={url}")
+path.write_text("\n".join(out) + "\n", encoding="utf-8")
+PY
+}
 
 start_postgres_container() {
   if [[ "$NO_DOCKER" == true ]]; then
@@ -58,7 +85,7 @@ start_postgres_container() {
 start_postgres_container || true
 
 [[ -f api/.env ]] || cp .env.example api/.env
-[[ -f web/.env.local ]] || echo "NEXT_PUBLIC_API_URL=http://127.0.0.1:${API_PORT}" > web/.env.local
+upsert_web_api_url
 
 VENV="$ROOT/api/.venv"
 PIP="$VENV/bin/pip"
@@ -93,6 +120,8 @@ trap cleanup EXIT INT TERM
 
 echo "API  → http://127.0.0.1:${API_PORT}/docs"
 echo "Web  → http://127.0.0.1:${WEB_PORT}"
+echo "Web points at NEXT_PUBLIC_API_URL from web/.env.local (updated to http://127.0.0.1:${API_PORT} by this script)."
+echo "If login/register cannot reach the API: ensure API started, curl http://127.0.0.1:${API_PORT}/health, and open the app at http://127.0.0.1:${WEB_PORT} (or add that origin to CORS_ORIGINS in api/.env)."
 echo "Ctrl+C stops API + web (Postgres container keeps running if started)."
 echo ""
 

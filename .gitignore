@@ -34,6 +34,9 @@ ENV/
 *.swo
 *~
 
+# API runtime tree (uploads, embeddings, sqlite when cwd is api/) — do not commit
+api/data/
+
 # Environment variables
 .env
 .env.local

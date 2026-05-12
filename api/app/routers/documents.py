@@ -9,7 +9,8 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.db import get_db
-from app.models import Document, DocumentCorrection, Transaction
+from app.deps import get_current_user
+from app.models import Document, DocumentCorrection, Transaction, User
 from app.schemas import DocumentResponse, DocumentUpdateBody
 from app.services.document_visualization import (
     create_annotated_document,
@@ -45,8 +46,9 @@ def list_documents(
     limit: int = 200,
     doc_type: Optional[str] = None,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
-    q = db.query(Document)
+    q = db.query(Document).filter(Document.user_id == current_user.id)
     if doc_type and doc_type != "all":
         q = q.filter(Document.document_type == doc_type)
     rows = q.order_by(Document.id.desc()).offset(skip).limit(limit).all()
@@ -57,6 +59,7 @@ def list_documents(
 async def upload_document(
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     if not file.filename:
         raise HTTPException(400, "Missing filename")
@@ -65,7 +68,7 @@ async def upload_document(
     if len(body) > max_bytes:
         raise HTTPException(413, f"File exceeds {settings.MAX_UPLOAD_MB} MB")
 
-    upload_dir = Path(settings.RAW_DOCS_PATH)
+    upload_dir = Path(settings.RAW_DOCS_PATH) / f"user_{current_user.id}"
     upload_dir.mkdir(parents=True, exist_ok=True)
     file_path = upload_dir / file.filename
     with open(file_path, "wb") as f:
@@ -73,6 +76,7 @@ async def upload_document(
 
     result = parse_document(str(file_path))
     doc = Document(
+        user_id=current_user.id,
         filename=file.filename,
         file_path=str(file_path),
         document_type=result.get("document_type", "unknown"),
@@ -84,24 +88,31 @@ async def upload_document(
 
     extr = result.get("extracted_data", {}) or {}
     for txn_data in extract_transactions_from_document(doc, extr):
+        txn_data["user_id"] = current_user.id
         db.add(Transaction(**txn_data))
     db.commit()
     db.refresh(doc)
     return _doc_to_response(doc)
 
 
-@router.get("/{document_id}", response_model=DocumentResponse)
-def get_document(document_id: int, db: Session = Depends(get_db)):
-    doc = db.query(Document).filter(Document.id == document_id).first()
+def _get_user_doc(document_id: int, user: User, db: Session) -> Document:
+    doc = db.query(Document).filter(
+        Document.id == document_id, Document.user_id == user.id
+    ).first()
     if not doc:
         raise HTTPException(404, "Document not found")
-    return _doc_to_response(doc)
+    return doc
+
+
+@router.get("/{document_id}", response_model=DocumentResponse)
+def get_document(document_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    return _doc_to_response(_get_user_doc(document_id, current_user, db))
 
 
 @router.get("/{document_id}/extraction-debug")
-def get_extraction_debug(document_id: int, db: Session = Depends(get_db)):
+def get_extraction_debug(document_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     """Heuristic extraction from stored raw_text vs saved extracted_data (read-only)."""
-    doc = db.query(Document).filter(Document.id == document_id).first()
+    doc = _get_user_doc(document_id, current_user, db)
     if not doc:
         raise HTTPException(404, "Document not found")
 
@@ -157,9 +168,10 @@ def reparse_document(
         description="Delete existing transactions for this document and insert new ones from re-extraction to avoid duplicates while debugging.",
     ),
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """Re-run parse_document on the stored file and update DB (local files only)."""
-    doc = db.query(Document).filter(Document.id == document_id).first()
+    doc = _get_user_doc(document_id, current_user, db)
     if not doc:
         raise HTTPException(404, "Document not found")
     path_str = doc.file_path or ""
@@ -204,8 +216,8 @@ def reparse_document(
 
 
 @router.get("/{document_id}/detail")
-def get_document_detail(document_id: int, db: Session = Depends(get_db)):
-    doc = db.query(Document).filter(Document.id == document_id).first()
+def get_document_detail(document_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    doc = _get_user_doc(document_id, current_user, db)
     if not doc:
         raise HTTPException(404, "Document not found")
     return {
@@ -220,8 +232,8 @@ def get_document_detail(document_id: int, db: Session = Depends(get_db)):
 
 
 @router.get("/{document_id}/confidence")
-def doc_confidence(document_id: int, db: Session = Depends(get_db)):
-    doc = db.query(Document).filter(Document.id == document_id).first()
+def doc_confidence(document_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    doc = _get_user_doc(document_id, current_user, db)
     if not doc:
         raise HTTPException(404, "Document not found")
     ed = doc.extracted_data or {}
@@ -229,8 +241,8 @@ def doc_confidence(document_id: int, db: Session = Depends(get_db)):
 
 
 @router.get("/{document_id}/preview")
-def doc_preview(document_id: int, db: Session = Depends(get_db)):
-    doc = db.query(Document).filter(Document.id == document_id).first()
+def doc_preview(document_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    doc = _get_user_doc(document_id, current_user, db)
     if not doc:
         raise HTTPException(404, "Document not found")
     if not doc.file_path or not Path(doc.file_path).exists():
@@ -251,8 +263,9 @@ def patch_document(
     document_id: int,
     body: DocumentUpdateBody,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
-    doc = db.query(Document).filter(Document.id == document_id).first()
+    doc = _get_user_doc(document_id, current_user, db)
     if not doc:
         raise HTTPException(404, "Document not found")
     old = dict(doc.extracted_data or {})

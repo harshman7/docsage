@@ -334,8 +334,8 @@ function SpendingLineChart({
               ? `Year ${label}`
               : formatSpendXTick("month", String(label), true)
           }
-          formatter={(value: number | string) => [
-            `$${Number(value).toLocaleString(undefined, { maximumFractionDigits: 2 })}`,
+          formatter={(value) => [
+            `$${Number(value ?? 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}`,
             "Spend",
           ]}
         />
@@ -414,8 +414,8 @@ function CategoryBarChart({ data }: { data: CatDatum[] }) {
         />
         <Tooltip
           contentStyle={tooltipStyle}
-          formatter={(value: number | string) => [
-            `$${Number(value).toLocaleString(undefined, { maximumFractionDigits: 2 })}`,
+          formatter={(value) => [
+            `$${Number(value ?? 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}`,
             "Spend",
           ]}
           labelFormatter={(_, payload) => {

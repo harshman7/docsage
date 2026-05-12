@@ -10,11 +10,13 @@ import {
   FileStack,
   GitCompare,
   LayoutDashboard,
+  LogOut,
   MessageSquare,
   Receipt,
   Sparkles,
 } from "lucide-react";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { useAuth } from "@/contexts/auth";
 
 const easeApple = [0.25, 0.1, 0.25, 1] as const;
 
@@ -32,6 +34,7 @@ const links = [
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const reduce = useReducedMotion();
+  const { user, logout } = useAuth();
 
   return (
     <div className="mesh-bg min-h-screen text-slate-900 dark:text-neutral-100">
@@ -112,6 +115,20 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               );
             })}
           </nav>
+          {user && (
+            <div className="mt-4 hidden border-t border-slate-200/60 pt-4 dark:border-neutral-800 md:block">
+              <div className="mb-2 truncate px-3 text-xs text-slate-500 dark:text-neutral-500">
+                {user.email}
+              </div>
+              <button
+                onClick={logout}
+                className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm font-medium text-slate-600 transition hover:bg-slate-100 hover:text-slate-900 dark:text-neutral-400 dark:hover:bg-neutral-900/90 dark:hover:text-red-300"
+              >
+                <LogOut className="h-4 w-4 shrink-0 opacity-90" strokeWidth={2} />
+                Sign out
+              </button>
+            </div>
+          )}
         </aside>
         <main className="relative flex-1 px-4 py-8 sm:px-6 lg:px-10">
           <motion.div

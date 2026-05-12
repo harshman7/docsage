@@ -22,6 +22,7 @@ def run_agent_pipeline(
     use_rag: bool = True,
     use_sql: bool = True,
     history: Optional[List[Dict[str, str]]] = None,
+    user_id: Optional[int] = None,
 ) -> Dict[str, Any]:
     graph = get_compiled_graph(rag)
 
@@ -36,6 +37,7 @@ def run_agent_pipeline(
         "refinement_hint": "",
         "answer": "",
         "history": list(history) if history else [],
+        "user_id": user_id,
     }
 
     out = graph.invoke(seed)
